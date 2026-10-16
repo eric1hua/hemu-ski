@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { loadWorld, PisteField, SERVICE_CENTRES, PISTE_HALF_WIDTH } from './world/data.js';
 import { createDetailTerrain, createBackdrop } from './world/terrain.js';
-import { createForest } from './world/trees.js';
+import { createForest, GAME_FOREST } from './world/trees.js';
 import { createLifts, createPisteMarkers, createBanner, createServiceCentre, gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
 import { InkPost } from './render/post.js';
@@ -51,7 +51,8 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---------- World ----------
-const world = await loadWorld();
+// The map editor's saved edits apply unless the URL says ?original.
+const world = await loadWorld('', { edits: !new URLSearchParams(location.search).has('original') });
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
 const { detail, meta } = world;
 const piste = new PisteField(meta.runs, detail.size, 4, 60, detail.center);
@@ -64,8 +65,7 @@ const backdrop = createBackdrop(world.backdrop, detail, TREELINE);
 scene.add(backdrop);
 const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(detail, c));
 scene.add(...lodges);
-const lodgeClearings = SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 110 }));
-const forest = createForest(detail, piste, meta.lifts, { treeline: TREELINE, clearings: lodgeClearings });
+const forest = createForest(detail, piste, meta.lifts, { ...GAME_FOREST, edits: world.edits?.trees });
 scene.add(forest.group);
 const lifts = createLifts(detail, meta.lifts);
 scene.add(lifts.group);
@@ -434,7 +434,7 @@ function unload(ride) {
     for (let k = 0; k < 24; k++) {
       const a = (k / 24) * Math.PI * 2;
       const x = P.x + Math.cos(a) * R, z = P.z + Math.sin(a) * R;
-      if (!detail.inside(x, z, 60) || blocked(x, z) || forest.hit(x, z, 3)) continue;
+      if (!detail.inside(x, z, 60) || detail.holeAt(x, z) || blocked(x, z) || forest.hit(x, z, 3)) continue;
       detail.normalAt(x, z, _n);
       const slope = 1 - _n.y;
       const score = (piste.distAt(x, z) < PISTE_HALF_WIDTH ? 1 : 0) + Math.min(slope, 0.12) * 6 - R * 0.004;

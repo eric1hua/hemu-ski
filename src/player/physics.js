@@ -3,9 +3,9 @@
 // sideways velocity and feeds most of it back along the board (carving), so
 // turning costs a little speed rather than a lot. Leaving the ground happens
 // naturally when the terrain falls away faster than gravity can follow.
-// The edge of the heightfield and the buildings (`obstacles`, rotated boxes
-// { x, z, yaw, hw, hd }) are walls you slide along; only trees and bad
-// landings knock you over.
+// The edge of the heightfield, tiles deleted in the map editor and the
+// buildings (`obstacles`, rotated boxes { x, z, yaw, hw, hd }) are walls you
+// slide along; only trees and bad landings knock you over.
 import * as THREE from 'three';
 import { PISTE_HALF_WIDTH } from '../world/data.js';
 
@@ -23,6 +23,7 @@ export class BoardPhysics {
     this.obstacles = obstacles;
     this.crashDir = new THREE.Vector3(); // travel direction when you went down
     this.pos = new THREE.Vector3();
+    this.prev = new THREE.Vector3(); // position at the start of the step, for the hole walls
     this.vel = new THREE.Vector3();
     this.normal = new THREE.Vector3(0, 1, 0);
     this.yaw = 0;
@@ -60,6 +61,7 @@ export class BoardPhysics {
 
   step(dt, input) {
     const hf = this.hf;
+    this.prev.copy(this.pos);
     if (this.crashed > 0) {
       this.crashed -= dt;
       this.vel.multiplyScalar(Math.exp(-dt * 2.5));
@@ -160,6 +162,12 @@ export class BoardPhysics {
     const { hf, pos, vel } = this;
     const lim = hf.half - EDGE;
     let hitWall = false;
+    // A deleted tile: undo the move along whichever axis carried you into it.
+    if (hf.holeAt(pos.x, pos.z)) {
+      if (hf.holeAt(pos.x, this.prev.z)) { pos.x = this.prev.x; vel.x = 0; }
+      if (hf.holeAt(pos.x, pos.z)) { pos.z = this.prev.z; vel.z = 0; }
+      hitWall = true;
+    }
     for (const [axis, c] of [['x', hf.center[0]], ['z', hf.center[1]]]) {
       const d = pos[axis] - c;
       if (Math.abs(d) <= lim) continue;

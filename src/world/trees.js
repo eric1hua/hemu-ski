@@ -1,13 +1,14 @@
 // Conifer forest: jittered-grid placement, cleared along pistes, lift lines and
-// around buildings, thinning out toward the treeline. Like the resort's trail
-// map it is open country with clumps of trees, not a solid canopy. Instanced per 250 m chunk so frustum and
+// around buildings, thinning out toward the treeline, plus whatever the map
+// editor removed or planted. Like the resort's trail map it is open country with
+// clumps of trees, not a solid canopy. Instanced per 250 m chunk so frustum and
 // shadow culling work, with a cheaper mesh for far chunks; far away, 4 × 4
 // chunks share one mesh to keep the draw calls down.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeToon } from '../render/toon.js';
 import { vnoise } from './terrain.js';
-import { PISTE_HALF_WIDTH } from './data.js';
+import { PISTE_HALF_WIDTH, SERVICE_CENTRES } from './data.js';
 
 const GREEN = new THREE.Color('#4d7560');
 const GREEN_DARK = new THREE.Color('#3d6352');
@@ -65,15 +66,24 @@ function buildTreeGeometry(lod) {
   return g;
 }
 
-// `scale` grows every tree (and the clearings around runs and lifts) for the
-// diorama's toy proportions; `chunk` and `lodDistance` tune batching and LOD.
-// `density` is the share of grid spots that get a tree; `clearings` are
-// [{ x, z, r }] circles kept free (e.g. around base lodges).
-export function createForest(hf, piste, lifts, { treeline, spacing = 10, scale = 1, chunk = 250, lodDistance = 450, density = 0.5, clearings = [] }) {
-  const near = buildTreeGeometry(0);
-  const far = buildTreeGeometry(1);
-  const mat = makeToon({ vertexColors: true }, { hatch: 1 });
+// The game's forest settings, shared with the map editor so it shows the same trees.
+export const GAME_FOREST = {
+  treeline: 2350,
+  spacing: 10,
+  density: 0.5,
+  clearings: SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 110 })),
+};
 
+// Every spot the forest would put a tree: one jittered candidate per `spacing`
+// grid cell, kept unless it's above the treeline, on a run, under a lift, on a
+// cliff, in a glade or a clearing. A spot's `id` is its grid cell (row-major from
+// the north-west corner), so it stays the same when other trees come and go;
+// the map editor's removals refer to it. `scale` grows every tree (and the
+// clearings around runs and lifts) for the diorama's toy proportions; `density`
+// is the share of grid spots that get a tree; `clearings` are [{ x, z, r }]
+// circles kept free (e.g. around base lodges). `area` ([x0, z0, x1, z1]) limits it
+// to the grid cells whose corner falls inside, for redoing part of the forest.
+export function forestSpots(hf, piste, lifts, { treeline, spacing = 10, scale = 1, density = 0.5, clearings = [], area = null }) {
   const liftSegs = lifts.map((l) => [l.points[0], l.points[l.points.length - 1]]);
   const liftDist = (x, z) => {
     let best = Infinity;
@@ -86,20 +96,20 @@ export function createForest(hf, piste, lifts, { treeline, spacing = 10, scale =
     return best;
   };
 
-  const CH = chunk;
   const clear = 2.8 * (scale - 1); // extra canopy radius beyond a normal tree
-  const chunks = new Map();
-  const colliders = new Map(); // 10 m spatial hash of trunks
-  const up = new THREE.Vector3(0, 1, 0);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const nrm = new THREE.Vector3();
-  let count = 0;
-
-  for (let z = hf.z0; z < hf.z0 + hf.size; z += spacing) {
-    for (let x = hf.x0; x < hf.x0 + hf.size; x += spacing) {
+  const cols = Math.ceil(hf.size / spacing);
+  const lo = (v, v0) => Math.max(0, Math.ceil((v - v0) / spacing));
+  const hi = (v, v0) => Math.min(cols - 1, Math.floor((v - v0) / spacing));
+  const [gi0, gj0, gi1, gj1] = area ? [lo(area[0], hf.x0), lo(area[1], hf.z0), hi(area[2], hf.x0), hi(area[3], hf.z0)] : [0, 0, cols - 1, cols - 1];
+  const spots = [];
+  for (let gj = gj0; gj <= gj1; gj++) {
+    const z = hf.z0 + gj * spacing;
+    for (let gi = gi0; gi <= gi1; gi++) {
+      const x = hf.x0 + gi * spacing;
       const jx = x + (hash(x, z) - 0.5) * spacing * 0.9;
       const jz = z + (hash(z + 3.3, x) - 0.5) * spacing * 0.9;
-      if (!hf.inside(jx, jz, 30)) continue;
+      if (!hf.inside(jx, jz, 30) || hf.holeAt(jx, jz)) continue;
       const y = hf.heightAt(jx, jz);
       const tl = treeline + (vnoise(jx * 0.006, jz * 0.006) - 0.5) * 160;
       if (y > tl) continue;
@@ -114,24 +124,64 @@ export function createForest(hf, piste, lifts, { treeline, spacing = 10, scale =
       if (vnoise(jx * 0.012 + 40, jz * 0.012) < 0.42) continue; // glades
       if (hash(jx + 5.1, jz * 0.7) > density) continue;
       if (clearings.some((c) => Math.hypot(jx - c.x, jz - c.z) < c.r + clear)) continue;
-
-      const ts = (0.75 + hash(jz, jx * 2.1) * 0.55) * (1 - nearLine * 0.4) * scale;
-      q.setFromAxisAngle(up, hash(jx, jz + 9) * Math.PI * 2);
-      s.set(ts, ts * (0.9 + hash(jx + 2, jz) * 0.3), ts);
-      p.set(jx, y - 0.3, jz);
-      m.compose(p, q, s);
-
-      const key = `${Math.floor(jx / CH)},${Math.floor(jz / CH)}`;
-      let list = chunks.get(key);
-      if (!list) chunks.set(key, (list = []));
-      list.push(m.clone());
-      const ck = `${Math.floor(jx / 10)},${Math.floor(jz / 10)}`;
-      let cl = colliders.get(ck);
-      if (!cl) colliders.set(ck, (cl = []));
-      cl.push({ x: jx, z: jz, r: 0.45 * ts + 0.15 });
-      count++;
+      spots.push(tree(gj * cols + gi, jx, jz, (0.75 + hash(jz, jx * 2.1) * 0.55) * (1 - nearLine * 0.4) * scale));
     }
   }
+  return spots;
+}
+
+// The map editor's changes to the forest (all optional):
+//   density  replaces the forest's `density`
+//   removed  spot ids with no tree
+//   added    planted trees, [x, z, size] (size 1 is an average tree)
+// Planted trees get negative ids (-1 for added[0], -2 for added[1], ...). Returns
+// the trees that stand, and the removed spots (which the editor shows, to restore).
+export function applyTreeEdits(spots, hf, edits, scale = 1) {
+  if (!edits) return { trees: spots, removed: [] };
+  const gone = edits.removed instanceof Set ? edits.removed : new Set(edits.removed || []);
+  const trees = [], removed = [];
+  for (const t of spots) (gone.has(t.id) ? removed : trees).push(t);
+  (edits.added || []).forEach(([x, z, size], k) => {
+    if (hf.inside(x, z) && !hf.holeAt(x, z)) trees.push(tree(-1 - k, x, z, size * scale));
+  });
+  return { trees, removed };
+}
+
+function tree(id, x, z, s) {
+  return { id, x, z, s, sy: s * (0.9 + hash(x + 2, z) * 0.3), rot: hash(x, z + 9) * Math.PI * 2 };
+}
+
+// `chunk` and `lodDistance` tune batching and LOD; `edits` are the map editor's
+// (see applyTreeEdits); the rest is forestSpots()'s.
+export function createForest(hf, piste, lifts, { chunk = 250, lodDistance = 450, edits = null, ...opts }) {
+  const near = buildTreeGeometry(0);
+  const far = buildTreeGeometry(1);
+  const mat = makeToon({ vertexColors: true }, { hatch: 1 });
+  const density = edits?.density ?? opts.density;
+  const { trees } = applyTreeEdits(forestSpots(hf, piste, lifts, { ...opts, ...(density !== undefined && { density }) }), hf, edits, opts.scale);
+
+  const CH = chunk;
+  const chunks = new Map();
+  const colliders = new Map(); // 10 m spatial hash of trunks
+  const up = new THREE.Vector3(0, 1, 0);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+
+  for (const t of trees) {
+    q.setFromAxisAngle(up, t.rot);
+    s.set(t.s, t.sy, t.s);
+    p.set(t.x, hf.heightAt(t.x, t.z) - 0.3, t.z);
+    m.compose(p, q, s);
+
+    const key = `${Math.floor(t.x / CH)},${Math.floor(t.z / CH)}`;
+    let list = chunks.get(key);
+    if (!list) chunks.set(key, (list = []));
+    list.push(m.clone());
+    const ck = `${Math.floor(t.x / 10)},${Math.floor(t.z / 10)}`;
+    let cl = colliders.get(ck);
+    if (!cl) colliders.set(ck, (cl = []));
+    cl.push({ x: t.x, z: t.z, r: 0.45 * t.s + 0.15 });
+  }
+  const count = trees.length;
 
   const group = new THREE.Group();
   const make = (geo, mats, shadow) => {

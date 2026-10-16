@@ -11,18 +11,54 @@ function decode(buf, { min, max }) {
   return out;
 }
 
+// Map-editor saves (see src/editor/) live beside the bake, in public/data/edits/.
+export const EDITS_DIR = 'edits/';
+// The editor's tile: 10 heightfield cells, 80 m on the game's 8 m grid.
+export const TILE_CELLS = 10;
+
+// The editor's overlay, or null. The dev server answers a missing file with
+// index.html, so anything that isn't JSON counts as "no edits".
+async function loadEdits(base) {
+  try {
+    const r = await fetch(base + EDITS_DIR + 'edits.json', { cache: 'no-store' });
+    if (!r.ok || !r.headers.get('content-type')?.includes('json')) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
 // `dir` picks a sub-folder of public/data (e.g. 'diorama/'); the backdrop is optional.
-export async function loadWorld(dir = '') {
+// With `edits`, the map editor's saved heights, holes and runs replace the bake's.
+export async function loadWorld(dir = '', { edits: useEdits = false } = {}) {
   const base = BASE + dir;
   const meta = await (await fetch(base + 'world.json')).json();
+  const edits = useEdits ? await loadEdits(base) : null;
+  const detailMeta = edits ? { ...meta.detail, ...edits.detail, file: EDITS_DIR + edits.detail.file } : meta.detail;
   const [d, b] = await Promise.all(
-    [meta.detail, meta.backdrop].map((f) => f && fetch(base + f.file).then((r) => r.arrayBuffer())),
+    [detailMeta, meta.backdrop].map((f) => f && fetch(base + f.file, { cache: edits ? 'no-store' : 'default' }).then((r) => r.arrayBuffer())),
   );
+  const detail = new Heightfield(detailMeta.size, detailMeta.cells, decode(d, detailMeta), detailMeta.center);
+  if (edits) {
+    meta.runs = edits.runs;
+    detail.setHoles(edits.tileCells, edits.holes);
+  }
   return {
     meta,
-    detail: new Heightfield(meta.detail.size, meta.detail.cells, decode(d, meta.detail), meta.detail.center),
+    edits,
+    detail,
     backdrop: b && new Heightfield(meta.backdrop.size, meta.backdrop.cells, decode(b, meta.backdrop)),
   };
+}
+
+// The inverse of decode(), for the editor's saves.
+export function encodeHeights(h) {
+  let min = Infinity, max = -Infinity;
+  for (const v of h) { if (v < min) min = v; if (v > max) max = v; }
+  const s = 65535 / (max - min || 1);
+  const q = new Uint16Array(h.length);
+  for (let i = 0; i < h.length; i++) q[i] = Math.round((h[i] - min) * s);
+  return { data: q, min, max };
 }
 
 // A square grid of `size` metres centred on `center` ([x, z]; the game's block is
@@ -38,6 +74,31 @@ export class Heightfield {
     this.x0 = center[0] - this.half; // west edge
     this.z0 = center[1] - this.half; // north edge
     this.h = heights;
+    this.setHoles(TILE_CELLS, []);
+  }
+  // Deleted tiles: square blocks of `tileCells` cells with no ground. `list`
+  // holds tile indices (row-major, north-west first).
+  setHoles(tileCells, list) {
+    this.tileCells = tileCells;
+    this.tiles = Math.ceil(this.cells / tileCells);
+    this.tileSize = tileCells * this.step;
+    this.holes = new Uint8Array(this.tiles * this.tiles);
+    for (const t of list) this.holes[t] = 1;
+    this.hasHoles = list.length > 0;
+  }
+  // Tile index under a world point, or -1 outside the grid.
+  tileAt(x, z) {
+    const ti = Math.floor((x - this.x0) / this.tileSize), tj = Math.floor((z - this.z0) / this.tileSize);
+    return ti < 0 || tj < 0 || ti >= this.tiles || tj >= this.tiles ? -1 : tj * this.tiles + ti;
+  }
+  holeAt(x, z) {
+    if (!this.hasHoles) return false;
+    const t = this.tileAt(x, z);
+    return t >= 0 && this.holes[t] === 1;
+  }
+  // Is grid cell (i, j) inside a deleted tile?
+  cellIsHole(i, j) {
+    return this.hasHoles && this.holes[Math.floor(j / this.tileCells) * this.tiles + Math.floor(i / this.tileCells)] === 1;
   }
   inside(x, z, margin = 0) {
     return Math.abs(x - this.center[0]) < this.half - margin && Math.abs(z - this.center[1]) < this.half - margin;

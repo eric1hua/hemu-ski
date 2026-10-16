@@ -40,13 +40,14 @@ function gridGeometry(hf, yOffset) {
   let t = 0;
   for (let j = 0; j < hf.cells; j++)
     for (let i = 0; i < hf.cells; i++) {
+      if (hf.cellIsHole(i, j)) continue; // tiles deleted in the map editor
       const a = j * verts + i, b = a + 1, c = a + verts, d = c + 1;
       idx[t++] = a; idx[t++] = c; idx[t++] = b;
       idx[t++] = b; idx[t++] = c; idx[t++] = d;
     }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.setIndex(new THREE.BufferAttribute(idx.subarray(0, t), 1));
   g.computeVertexNormals();
   return g;
 }
@@ -135,6 +136,7 @@ function splitGrid(g, hf, tiles, stride = 1) {
       const idx = [];
       for (let j = 0; j < h - 1; j++)
         for (let i = 0; i < w - 1; i++) {
+          if (hf.cellIsHole(i0 + i * stride, j0 + j * stride)) continue;
           const a = j * w + i, b = a + 1, c = a + w, d = c + 1;
           idx.push(a, c, b, b, c, d);
         }

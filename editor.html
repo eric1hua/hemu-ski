@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hemu Map Editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand+SC&family=Patrick+Hand&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/editor/editor.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <aside class="ed-card ed-tools">
+      <div class="tab">Map editor</div>
+      <div class="ed-toolrow" role="toolbar" aria-label="Tools">
+        <button data-tool="tiles" title="Tiles (T)">▦ Tiles <kbd>T</kbd></button>
+        <button data-tool="runs" title="Runs (R)">〰 Runs <kbd>R</kbd></button>
+        <button data-tool="trees" title="Trees (G)">♣ Trees <kbd>G</kbd></button>
+        <button data-tool="hand" title="Hand (H)">✋ Hand <kbd>H</kbd></button>
+      </div>
+
+      <section data-panel="tiles">
+        <p class="ed-sel" id="tile-info">Click a tile, or drag a box.</p>
+        <div class="ed-grid">
+          <button data-act="raise" title="Raise (])">▲ Raise</button>
+          <button data-act="lower" title="Lower ([)">▼ Lower</button>
+          <button data-act="level" title="Flatten to the selection's average height">═ Level</button>
+          <button data-act="smooth" title="Take the bumps out">≈ Smooth</button>
+          <button data-act="delete" class="warn" title="Delete tiles (Del)">✕ Delete</button>
+          <button data-act="restore" title="Restore deleted tiles (Shift+Del)">↺ Restore</button>
+        </div>
+        <p class="hint">Shift adds to the selection, Alt takes away.</p>
+      </section>
+
+      <section data-panel="runs" class="hidden">
+        <p class="ed-sel" id="run-info">Click a run to edit it.</p>
+        <div class="ed-grid">
+          <button data-act="run-smooth" title="Smooth the ground under the run">≈ Smooth</button>
+          <button data-act="run-bench" title="Level the run side to side">═ Bench</button>
+          <button data-act="run-raise" title="Raise the run (])">▲ Raise</button>
+          <button data-act="run-lower" title="Lower the run ([)">▼ Lower</button>
+        </div>
+        <p class="hint">Drag a point to move it. Double-click the line to add one, Alt-click a point (or hover it and press Del) to remove it.</p>
+      </section>
+
+      <section data-panel="trees" class="hidden">
+        <div class="ed-toolrow ed-modes" role="group" aria-label="Trees mode">
+          <button data-tmode="select" title="Pick trees (P toggles)">⬚ Select</button>
+          <button data-tmode="plant" title="Plant trees (P toggles)">＋ Plant</button>
+        </div>
+        <p class="ed-sel" id="tree-info"></p>
+        <div class="ed-grid">
+          <button data-act="tree-remove" class="warn" title="Remove the selected trees (Del)">✕ Remove</button>
+          <button data-act="tree-restore" title="Put removed trees back (Shift+Del)">↺ Restore</button>
+        </div>
+        <p class="hint" id="tree-hint"></p>
+      </section>
+
+      <section data-panel="hand" class="hidden">
+        <p class="hint">Left-drag pans. In any tool, right-drag orbits, middle-drag (or Space + drag) pans, and the wheel zooms to the cursor.</p>
+      </section>
+
+      <div class="ed-params">
+        <label data-only="tiles runs hand">Step <input id="p-step" type="number" min="0.5" max="200" step="0.5" value="5" /> m</label>
+        <label data-only="tiles runs hand">Blend <input id="p-blend" type="number" min="0" max="400" step="10" value="60" /> m</label>
+        <label data-only="trees">Forest density <input id="p-density" type="number" min="0" max="100" step="5" value="50" /> %</label>
+        <label data-only="runs">Run width <input id="p-width" type="number" min="4" max="200" step="2" value="34" /> m</label>
+      </div>
+    </aside>
+
+    <div class="ed-card ed-top">
+      <button id="undo" title="Undo (⌘Z)">↶</button>
+      <button id="redo" title="Redo (⇧⌘Z)">↷</button>
+      <button id="fit" title="Whole map (Home)">⌂</button>
+      <button id="save" title="Save (⌘S)">Save</button>
+      <button id="play" title="Save and ride it">Ride ▸</button>
+      <button id="reset" class="warn" title="Throw away saved edits and go back to the baked map">Reset</button>
+    </div>
+
+    <div class="ed-box hidden" id="box"></div>
+
+    <div class="ed-status" id="status">
+      <span id="st-cursor">—</span>
+      <span id="st-msg"></span>
+    </div>
+
+    <details class="ed-card ed-help">
+      <summary>Keys</summary>
+      <div class="keys">
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>pan (Shift: faster)</span>
+        <span>right-drag</span><span>orbit</span>
+        <span>middle / Space-drag</span><span>pan</span>
+        <span>wheel</span><span>zoom to cursor</span>
+        <span><kbd>F</kbd></span><span>frame the selection</span>
+        <span><kbd>]</kbd><kbd>[</kbd></span><span>raise / lower by the step</span>
+        <span><kbd>Del</kbd></span><span>delete tiles / run point / trees</span>
+        <span><kbd>P</kbd></span><span>trees: select ↔ plant</span>
+        <span><kbd>Esc</kbd></span><span>clear the selection</span>
+        <span><kbd>⌘Z</kbd><kbd>⌘S</kbd></span><span>undo · save</span>
+      </div>
+    </details>
+
+    <div id="loading"><div class="env">⛰</div><div>Loading the map</div></div>
+    <script type="module" src="/src/editor/main.js"></script>
+  </body>
+</html>
