@@ -1,0 +1,75 @@
+// Pinyin and a short English gloss for the run names in OpenStreetMap.
+export const RUN_NAMES = {
+  丁香道: ['Dingxiang', 'Lilac'],
+  不冻泉道: ['Budongquan', 'Unfrozen Spring'],
+  也麦盖特道: ['Yemaigaite'],
+  云杉道: ['Yunshan', 'Spruce'],
+  云湖道: ['Yunhu', 'Cloud Lake'],
+  云霄峰道: ['Yunxiaofeng', 'Sky-High Peak'],
+  五彩滩道: ['Wucaitan', 'Five-Colour Shoal'],
+  五指泉道: ['Wuzhiquan', 'Five-Finger Spring'],
+  伊雷木湖道: ['Yileimuhu', 'Yileimu Lake'],
+  冷杉道: ['Lengshan', 'Fir'],
+  卧龙湾道: ['Wolongwan', 'Sleeping Dragon Bay'],
+  友谊峰道: ['Youyifeng', 'Friendship Peak'],
+  双湖道: ['Shuanghu', 'Twin Lakes'],
+  可可托海道: ['Keketuohai', 'Koktokay'],
+  吉克普林道: ['Jikepulin'],
+  响泉道: ['Xiangquan', 'Echoing Spring'],
+  喀纳斯道: ['Kanasi', 'Kanas'],
+  圣泉道: ['Shengquan', 'Holy Spring'],
+  将军山道: ['Jiangjunshan', "General's Mountain"],
+  山楂道: ['Shanzha', 'Hawthorn'],
+  巴丹莉道: ['Badanli'],
+  干湖道: ['Ganhu', 'Dry Lake'],
+  月亮湾道: ['Yueliangwan', 'Moon Bay'],
+  望泉道: ['Wangquan', 'Spring View'],
+  柳兰道: ['Liulan', 'Fireweed'],
+  泰加林道: ['Taijialin', 'Taiga'],
+  清泉道: ['Qingquan', 'Clear Spring'],
+  滴水泉道: ['Dishuiquan', 'Dripping Spring'],
+  狼山道: ['Langshan', 'Wolf Mountain'],
+  白哈巴道: ['Baihaba'],
+  白杨道: ['Baiyang', 'Poplar'],
+  白桦道: ['Baihua', 'Birch'],
+  白沙湖道: ['Baishahu', 'White Sand Lake'],
+  白湖道: ['Baihu', 'White Lake'],
+  盘古道: ['Pangu'],
+  石泉道: ['Shiquan', 'Stone Spring'],
+  神仙湾道: ['Shenxianwan', "Immortals' Bay"],
+  神石城道: ['Shenshicheng', 'Stone City'],
+  禾木道: ['Hemu'],
+  红柳道: ['Hongliu', 'Red Willow'],
+  美丽峰道: ['Meilifeng', 'Beautiful Peak'],
+  芍药道: ['Shaoyao', 'Peony'],
+  花楸道: ['Huaqiu', 'Rowan'],
+  蔷薇道: ['Qiangwei', 'Wild Rose'],
+  蝴蝶泉道: ['Hudiequan', 'Butterfly Spring'],
+  谷帘泉道: ['Gulianquan', 'Curtain Spring'],
+  贾登峪道: ['Jiadengyu'],
+  连接道: ['Lianjie', 'Connector'],
+  野卡峡道: ['Yekaxia', 'Yeka Gorge'],
+  金莲花道: ['Jinlianhua', 'Globeflower'],
+  青格里道: ['Qinggeli'],
+  静泉谷: ['Jingquangu', 'Quiet Spring Valley'],
+  驼颈湾道: ['Tuojingwan', "Camel's Neck Bay"],
+  鸭泽湖道: ['Yazehu', 'Duck Marsh Lake'],
+  黑湖道: ['Heihu', 'Black Lake'],
+};
+
+export const DIFFICULTY = {
+  easy: { label: 'Easy', color: '#4f8fd6', rank: 0 },
+  novice: { label: 'Novice', color: '#4f8fd6', rank: 0 },
+  intermediate: { label: 'Intermediate', color: '#d9534a', rank: 1 },
+  advanced: { label: 'Advanced', color: '#23303a', rank: 2 },
+  expert: { label: 'Expert', color: '#23303a', rank: 3 },
+  freeride: { label: 'Freeride', color: '#f08a24', rank: 3 },
+};
+
+const LIFT_TYPES = { gondola: 'Gondola', chair_lift: 'Chairlift', magic_carpet: 'Magic carpet', drag_lift: 'Drag lift', 't-bar': 'T-bar' };
+
+export function liftTitle(lift) {
+  const type = LIFT_TYPES[lift.type] || 'Lift';
+  const no = lift.name && lift.name.match(/(\d+)号/);
+  return { zh: lift.name || '魔毯', en: no ? `${type} No. ${no[1]}` : type };
+}

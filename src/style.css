@@ -1,0 +1,96 @@
+:root {
+  --ink: #23303a;
+  --paper: #fbfaf5;
+  --tab: #7fb0e3;
+  --accent: #f0c24a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #8ccac4; }
+body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink); user-select: none; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+#loading {
+  position: fixed; inset: 0; display: grid; place-content: center; text-align: center;
+  background: var(--paper); font-family: 'Patrick Hand SC', cursive; font-size: 20px; letter-spacing: 2px;
+  transition: opacity 0.6s;
+}
+#loading .env { font-size: 54px; line-height: 1; }
+#loading.done { opacity: 0; pointer-events: none; }
+
+.hidden { display: none !important; }
+
+/* Dialogue-style panel, after the reference's speech boxes */
+.panel {
+  position: fixed; left: 50%; bottom: 7vh; transform: translateX(-50%);
+  width: min(620px, calc(100vw - 32px));
+  background: var(--paper); border: 2.5px solid var(--ink);
+  box-shadow: 6px 6px 0 rgba(35, 48, 58, 0.35);
+  padding: 30px 26px 22px; font-size: 21px; line-height: 1.35;
+}
+.panel .tab {
+  position: absolute; top: -22px; left: -14px; padding: 4px 18px;
+  background: var(--tab); color: #fff; border: 2.5px solid var(--ink);
+  font-family: 'Patrick Hand SC', cursive; font-size: 22px; letter-spacing: 1px;
+  text-shadow: 1.5px 1.5px 0 var(--ink);
+  box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35);
+}
+.panel .body p { margin: 0 0 8px; }
+.panel .body .dim { opacity: 0.65; font-size: 17px; }
+.panel .body kbd {
+  display: inline-block; min-width: 26px; padding: 0 6px; margin: 0 2px; text-align: center;
+  border: 2px solid var(--ink); border-radius: 4px; background: #fff; font-family: inherit; font-size: 16px;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.panel .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 10px 0 4px; font-size: 18px; }
+.panel .next {
+  position: absolute; right: -12px; bottom: -16px; width: 46px; height: 46px;
+  background: var(--paper); border: 2.5px solid var(--ink); color: var(--tab);
+  font-size: 22px; cursor: pointer; box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35);
+}
+.panel .next:hover { background: #fff; }
+.panel .big { font-family: 'Patrick Hand SC', cursive; font-size: 40px; line-height: 1; margin: 4px 0 10px; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; }
+#hud .run-tag {
+  position: absolute; top: 18px; left: 18px; display: flex; align-items: center; gap: 10px;
+  background: var(--paper); border: 2.5px solid var(--ink); padding: 4px 14px 4px 6px;
+  box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35); font-size: 20px;
+}
+#hud .badge {
+  width: 22px; height: 22px; border: 2px solid var(--ink); display: inline-block;
+}
+#hud .badge.easy { background: #4f8fd6; border-radius: 50%; }
+#hud .badge.intermediate { background: #d9534a; transform: rotate(45deg) scale(0.85); }
+#hud .badge.advanced, #hud .badge.expert { background: #23303a; transform: rotate(45deg) scale(0.85); }
+#hud .badge.offpiste { background: #fbfaf5; border-style: dashed; border-radius: 50%; }
+
+#hud .stats {
+  position: absolute; left: 18px; bottom: 18px; display: flex; gap: 10px;
+}
+#hud .stats > div {
+  background: var(--paper); border: 2.5px solid var(--ink); padding: 2px 12px 4px; min-width: 92px;
+  box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35);
+}
+#hud .stats label { display: block; font-family: 'Patrick Hand SC', cursive; font-size: 14px; opacity: 0.6; }
+#hud .stats b { font-size: 30px; font-weight: normal; }
+#hud .stats small { font-size: 14px; margin-left: 3px; }
+
+#minimap {
+  position: absolute; right: 18px; top: 18px; width: 200px; height: 200px;
+  border: 2.5px solid var(--ink); background: var(--paper); border-radius: 50%;
+  box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35);
+}
+#toast {
+  position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+  font-family: 'Patrick Hand SC', cursive; font-size: 46px; color: #fff;
+  text-shadow: 3px 3px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink);
+  opacity: 0; transition: opacity 0.25s; white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+
+@media (max-width: 640px) {
+  #minimap { width: 120px; height: 120px; }
+  #hud .stats > div { min-width: 70px; padding: 2px 8px; }
+  #hud .stats b { font-size: 22px; }
+  .panel { font-size: 18px; }
+}

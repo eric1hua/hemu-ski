@@ -1,0 +1,317 @@
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeToon } from '../render/toon.js';
+import { PISTE_HALF_WIDTH } from './data.js';
+
+const mats = {
+  steel: makeToon({ color: '#9aa3a6' }),
+  dark: makeToon({ color: '#3a4249' }),
+  cabin: makeToon({ color: '#f0c24a' }, { rim: 1 }),
+  cabinRed: makeToon({ color: '#d9604c' }, { rim: 1 }),
+  glass: makeToon({ color: '#2f4752' }),
+  wall: makeToon({ color: '#d8cfc0' }),
+  roof: makeToon({ color: '#4f6f7a' }),
+  wood: makeToon({ color: '#9b7458' }),
+  cable: new THREE.LineBasicMaterial({ color: '#2a3138' }),
+};
+const DIFF_COLOR = { easy: '#4f8fd6', novice: '#4f8fd6', intermediate: '#d9534a', advanced: '#23303a', expert: '#23303a', freeride: '#f08a24' };
+
+function station(width, depth, height) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mats.wall);
+  body.position.y = height / 2;
+  const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.01, width * 0.75, 2.6, 4, 1), mats.roof);
+  roof.rotation.y = Math.PI / 4;
+  roof.scale.set(1, 1, depth / width);
+  roof.position.y = height + 1.3;
+  const door = new THREE.Mesh(new THREE.BoxGeometry(width * 0.5, height * 0.55, 0.3), mats.glass);
+  door.position.set(0, height * 0.28, depth / 2);
+  for (const o of [body, roof, door]) { o.castShadow = true; o.receiveShadow = true; g.add(o); }
+  return g;
+}
+
+// `scale` sizes towers, cable height and cars; `stationScale` the buildings;
+// `spacing` multiplies the gap between cars; `speed` is the haul rope in m/s.
+export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacing: gap = 1, speed = 5 } = {}) {
+  const group = new THREE.Group();
+  const movers = [];
+  const belts = [];
+  const towerGeo = mergeGeometries([
+    new THREE.CylinderGeometry(0.35, 0.5, 1, 6).translate(0, 0.5, 0),
+  ]);
+  const armGeo = new THREE.BoxGeometry(7.5, 0.4, 0.5);
+
+  for (const lift of lifts) {
+    if (lift.type === 'magic_carpet') {
+      const belt = magicCarpet(hf, lift, stationScale);
+      group.add(belt.mesh);
+      belts.push(belt);
+      continue;
+    }
+    const a = lift.points[0], b = lift.points[lift.points.length - 1];
+    const A = new THREE.Vector3(a[0], hf.heightAt(a[0], a[1]), a[1]);
+    const B = new THREE.Vector3(b[0], hf.heightAt(b[0], b[1]), b[1]);
+    const dir = new THREE.Vector3(B.x - A.x, 0, B.z - A.z);
+    const len = dir.length();
+    dir.normalize();
+    const side = new THREE.Vector3(-dir.z, 0, dir.x);
+    const yaw = Math.atan2(dir.x, dir.z);
+    const isGondola = lift.type === 'gondola';
+    const cableH = (isGondola ? 13 : 9) * scale;
+
+    for (const [P, flip] of [[A, 0], [B, Math.PI]]) {
+      const st = station(14, 18, 7);
+      st.scale.setScalar(stationScale);
+      st.position.copy(P);
+      st.rotation.y = yaw + flip;
+      group.add(st);
+    }
+
+    // Towers every ~140 m; the cable runs tower-to-tower at a fixed clearance.
+    const nT = Math.max(2, Math.round(len / 140));
+    const pts = [];
+    for (let i = 0; i <= nT; i++) {
+      const t = i / nT;
+      const x = A.x + (B.x - A.x) * t, z = A.z + (B.z - A.z) * t;
+      const y = hf.heightAt(x, z);
+      pts.push(new THREE.Vector3(x, y + cableH, z));
+      if (i === 0 || i === nT) continue;
+      const tower = new THREE.Mesh(towerGeo, mats.steel);
+      tower.scale.set(scale, cableH + 1, scale);
+      tower.position.set(x, y - 0.5, z);
+      tower.castShadow = true;
+      const arm = new THREE.Mesh(armGeo, mats.dark);
+      arm.position.set(x, y + cableH + 0.3, z);
+      arm.rotation.y = yaw + Math.PI / 2;
+      arm.scale.setScalar(scale);
+      arm.castShadow = true;
+      group.add(tower, arm);
+    }
+    pts[0].y = A.y + 6 * scale;
+    pts[nT].y = B.y + 6 * scale;
+
+    const lanes = [-3 * scale, 3 * scale].map((off) => pts.map((p) => p.clone().addScaledVector(side, off)));
+    for (const lane of lanes) {
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lane), mats.cable));
+    }
+    const laneLen = lanes.map((lane) => {
+      const acc = [0];
+      for (let i = 1; i < lane.length; i++) acc.push(acc[i - 1] + lane[i].distanceTo(lane[i - 1]));
+      return acc;
+    });
+
+    // Cabins / chairs riding the loop: up on one lane, down on the other.
+    const spacing = (isGondola ? 55 : 25) * gap;
+    const n = Math.floor(laneLen[0][laneLen[0].length - 1] / spacing);
+    for (let laneIdx = 0; laneIdx < 2; laneIdx++) {
+      for (let i = 0; i < n; i++) {
+        const car = isGondola ? gondolaCabin(i % 4 === 0) : chair();
+        car.scale.setScalar(scale);
+        group.add(car);
+        movers.push({ car, lane: lanes[laneIdx], acc: laneLen[laneIdx], s: i * spacing, up: laneIdx === 0, yaw });
+      }
+    }
+  }
+
+  const tmp = new THREE.Vector3();
+  return {
+    group,
+    update(dt) {
+      for (const b of belts) b.tex.offset.y = (b.tex.offset.y - dt * b.rate) % 1;
+      for (const m of movers) {
+        const total = m.acc[m.acc.length - 1];
+        m.s = (m.s + dt * speed) % total;
+        const d = m.up ? m.s : total - m.s;
+        let i = 1;
+        while (i < m.acc.length - 1 && m.acc[i] < d) i++;
+        const t = (d - m.acc[i - 1]) / (m.acc[i] - m.acc[i - 1]);
+        tmp.lerpVectors(m.lane[i - 1], m.lane[i], t);
+        m.car.position.copy(tmp);
+        m.car.rotation.y = m.yaw + (m.up ? 0 : Math.PI);
+        m.car.rotation.z = Math.sin(m.s * 0.3) * 0.03;
+      }
+    },
+  };
+}
+
+// Conveyor belt for beginners, draped over the ground with a scrolling stripe.
+function magicCarpet(hf, lift, scale) {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#3a4249';
+  g.fillRect(0, 0, 16, 64);
+  g.fillStyle = '#9aa3a6';
+  g.fillRect(0, 0, 16, 10);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  const half = 0.6 * scale, lift0 = 0.3 * scale, step = 4;
+  const pts = [];
+  const p = lift.points;
+  for (let i = 0; i < p.length - 1; i++) {
+    const L = Math.hypot(p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1]);
+    for (let d = 0; d < L; d += step) pts.push([p[i][0] + ((p[i + 1][0] - p[i][0]) * d) / L, p[i][1] + ((p[i + 1][1] - p[i][1]) * d) / L]);
+  }
+  pts.push(p[p.length - 1]);
+  const pos = [], uv = [], idx = [];
+  let v = 0;
+  pts.forEach(([x, z], i) => {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const nx = -(b[1] - a[1]) / L, nz = (b[0] - a[0]) / L;
+    if (i) v += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][1]) / (half * 3);
+    for (const s of [-1, 1]) {
+      const px = x + nx * half * s, pz = z + nz * half * s;
+      pos.push(px, hf.heightAt(px, pz) + lift0, pz);
+      uv.push((s + 1) / 2, v);
+    }
+    if (i) { const k = i * 2; idx.push(k - 2, k, k - 1, k - 1, k, k + 1); }
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, makeToon({ map: tex, side: THREE.DoubleSide }, { hatch: 0 }));
+  mesh.receiveShadow = true;
+  // The belt moves at ~1 m/s; texture v is in units of 3 half-widths.
+  return { mesh, tex, rate: 1 / (half * 3) };
+}
+
+// Cars are merged into one vertex-coloured mesh each (one draw call per car).
+const carMat = makeToon({ vertexColors: true }, { rim: 1 });
+const carGeos = new Map();
+function part(geo, color, x, y, z) {
+  geo.translate(x, y, z);
+  const c = new THREE.Color(color);
+  const n = geo.attributes.position.count;
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: n * 3 }, (_, i) => c.toArray()[i % 3]), 3));
+  return geo;
+}
+function carGeometry(kind) {
+  if (carGeos.has(kind)) return carGeos.get(kind);
+  const parts = kind === 'chair'
+    ? [
+        part(new THREE.BoxGeometry(0.1, 2.0, 0.1), mats.dark.color, 0, -1, 0),
+        part(new THREE.BoxGeometry(2.4, 0.15, 0.7), mats.steel.color, 0, -2, 0),
+        part(new THREE.BoxGeometry(2.4, 0.7, 0.1), mats.steel.color, 0, -1.65, -0.35),
+      ]
+    : [
+        part(new THREE.BoxGeometry(0.12, 2.2, 0.12), mats.dark.color, 0, -1.1, 0),
+        part(new THREE.BoxGeometry(1.9, 2.0, 2.2), (kind === 'red' ? mats.cabinRed : mats.cabin).color, 0, -3.1, 0),
+        part(new THREE.BoxGeometry(1.95, 0.8, 1.7), mats.glass.color, 0, -2.7, 0),
+        part(new THREE.BoxGeometry(1.7, 0.25, 2.0), mats.dark.color, 0, -2.0, 0),
+      ];
+  const g = mergeGeometries(parts);
+  carGeos.set(kind, g);
+  return g;
+}
+
+function gondolaCabin(red) {
+  const m = new THREE.Mesh(carGeometry(red ? 'red' : 'cabin'), carMat);
+  m.castShadow = true;
+  return m;
+}
+
+function chair() {
+  const m = new THREE.Mesh(carGeometry('chair'), carMat);
+  m.castShadow = true;
+  return m;
+}
+
+// Bamboo-style marker poles every ~35 m down both edges of each run.
+export function createPisteMarkers(hf, runs) {
+  const poleGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.8, 5).translate(0, 0.9, 0);
+  const capGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.45, 5).translate(0, 1.6, 0);
+  const byColor = new Map();
+  for (const run of runs) {
+    const p = run.points;
+    let carry = 0;
+    for (let s = 0; s < p.length - 1; s++) {
+      const ax = p[s][0], az = p[s][1], bx = p[s + 1][0], bz = p[s + 1][1];
+      const len = Math.hypot(bx - ax, bz - az);
+      const nx = -(bz - az) / len, nz = (bx - ax) / len;
+      for (let d = carry; d < len; d += 35) {
+        const t = d / len;
+        const cx = ax + (bx - ax) * t, cz = az + (bz - az) * t;
+        for (const sd of [-1, 1]) {
+          const x = cx + nx * sd * (PISTE_HALF_WIDTH + 1), z = cz + nz * sd * (PISTE_HALF_WIDTH + 1);
+          const key = DIFF_COLOR[run.difficulty] || DIFF_COLOR.intermediate;
+          if (!byColor.has(key)) byColor.set(key, []);
+          byColor.get(key).push([x, hf.heightAt(x, z), z]);
+        }
+        carry = d + 35 - len;
+      }
+      if (carry < 0) carry = 0;
+    }
+  }
+  const group = new THREE.Group();
+  const pole = makeToon({ color: '#e9a23b' });
+  const m = new THREE.Matrix4();
+  for (const [color, list] of byColor) {
+    const capMat = makeToon({ color });
+    const poles = new THREE.InstancedMesh(poleGeo, pole, list.length);
+    const caps = new THREE.InstancedMesh(capGeo, capMat, list.length);
+    list.forEach(([x, y, z], i) => {
+      m.makeTranslation(x, y - 0.1, z);
+      poles.setMatrixAt(i, m);
+      caps.setMatrixAt(i, m);
+    });
+    poles.computeBoundingSphere();
+    caps.computeBoundingSphere();
+    group.add(poles, caps);
+  }
+  return group;
+}
+
+function textTexture(lines, bg, fg) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = '#23303a';
+  ctx.lineWidth = 14;
+  ctx.strokeRect(7, 7, c.width - 14, c.height - 14);
+  ctx.fillStyle = fg;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 104px "Patrick Hand SC", "PingFang SC", sans-serif';
+  ctx.fillText(lines[0], c.width / 2, lines[1] ? 100 : 128);
+  if (lines[1]) {
+    ctx.font = '56px "Patrick Hand SC", sans-serif';
+    ctx.fillText(lines[1], c.width / 2, 196);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+// An inflatable-style arch across the run, facing up-slope.
+export function createBanner(hf, at, facing, lines, color) {
+  const g = new THREE.Group();
+  const y = hf.heightAt(at.x, at.z);
+  g.position.set(at.x, y, at.z);
+  g.rotation.y = Math.atan2(facing.x, facing.z);
+  const legMat = makeToon({ color }, { rim: 1 });
+  for (const sx of [-9, 9]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.75, 6.5, 8).translate(0, 3.25, 0), legMat);
+    leg.position.x = sx;
+    leg.castShadow = true;
+    g.add(leg);
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(20, 2.6, 0.9), legMat);
+  beam.position.y = 7.2;
+  beam.castShadow = true;
+  const tex = textTexture(lines, '#fbfaf5', '#23303a');
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(14, 3.5), new THREE.MeshBasicMaterial({ map: tex }));
+  sign.position.set(0, 7.2, 0.5);
+  const back = sign.clone();
+  back.rotation.y = Math.PI;
+  back.position.z = -0.5;
+  g.add(beam, sign, back);
+  return g;
+}

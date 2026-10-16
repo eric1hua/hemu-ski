@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hemu Diorama</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand+SC&family=Patrick+Hand&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/diorama/diorama.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <aside class="dio-card" id="legend">
+      <div class="tab">Hemu · 禾木</div>
+      <p class="sub">Jikepulin Ski Resort · Altay, Xinjiang</p>
+      <ul class="key">
+        <li><span class="badge easy"></span>Easy</li>
+        <li><span class="badge intermediate"></span>Intermediate</li>
+        <li><span class="badge advanced"></span>Advanced</li>
+        <li><span class="badge expert"></span>Expert</li>
+        <li><span class="badge lift"></span>Lift</li>
+      </ul>
+      <p class="dim" id="stats"></p>
+      <p class="hint">Drag to spin · scroll to zoom · hover a run or lift</p>
+      <div class="btns">
+        <button id="spin" aria-pressed="true">Auto-spin</button>
+        <button id="home">Reset view</button>
+        <a href="./">Ride it ▸</a>
+      </div>
+    </aside>
+
+    <div id="tip" class="dio-tip hidden" role="status">
+      <div class="head"><span class="badge"></span><span class="zh"></span></div>
+      <div class="en"></div>
+      <div class="rows"></div>
+    </div>
+
+    <p class="dio-credit">Terrain: AWS Terrain Tiles · Runs &amp; lifts © OpenStreetMap contributors</p>
+
+    <div id="loading"><div class="env">⛰</div><div>Building the mountain</div></div>
+    <script type="module" src="/src/diorama/main.js"></script>
+  </body>
+</html>

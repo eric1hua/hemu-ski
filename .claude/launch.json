@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "hemu-ski", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "--port", "5179", "--strictPort"], "port": 5179 },
+    { "name": "hemu-diorama", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "--port", "5183", "--strictPort"], "port": 5183 }
+  ]
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hemu Ski</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand+SC&family=Patrick+Hand&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud" class="hidden">
+      <div class="run-tag"><span class="badge" id="run-badge"></span><span id="run-name"></span></div>
+      <div class="stats">
+        <div><label>Speed</label><b id="speed">0</b><small>km/h</small></div>
+        <div><label>Time</label><b id="time">0:00.0</b></div>
+        <div><label>Alt</label><b id="alt">0</b><small>m</small></div>
+      </div>
+      <canvas id="minimap" width="200" height="200"></canvas>
+      <div id="toast"></div>
+    </div>
+
+    <div id="panel" class="panel">
+      <div class="tab" id="panel-tab">Hemu · 禾木</div>
+      <div class="body" id="panel-body"></div>
+      <button class="next" id="panel-next" aria-label="Continue">▶</button>
+    </div>
+
+    <div id="loading"><div class="env">✉</div><div>Loading</div></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
