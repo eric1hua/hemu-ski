@@ -6,10 +6,14 @@ hatched shadows, teal painted sky), set on the real terrain under
 **Gondola No. 6 (6号索道)** at Hemu Jikepulin, Altay, Xinjiang
 ([OpenSkiMap](https://openskimap.org/?obj=0b7b6181d7f003a429f97c18559e0c6fbe08a8a5)).
 
-The course is **云霄峰道 Yunxiaofeng** (advanced, ~1.06 km, ~460 m drop), the
-run that goes from the gondola's top station (2,763 m) to its bottom station
-(2,299 m). The 38 other runs and 4 lifts in the 4 × 4 km area are there too, so you
-can ride off onto them.
+You start at the head of **云霄峰道 Yunxiaofeng** (advanced, ~1.06 km, ~460 m
+drop), below the gondola's top station (2,763 m). There is no finish: the whole
+7.2 km block is open, with all 87 runs and 10 lifts, down the valley to the
+**East and West Service Centres** (东区/西区服务大厅) about 1,300 m below. At a
+service centre, or at any lift's bottom station, press **E** to ride the gondola up
+to its top station: from the East hall, 1号 takes you up to 7号, which goes on to
+the summit. If you hit a tree or land badly, you get back up where you fell.
+The edge of the map is a wall.
 
 ```bash
 npm install
@@ -38,17 +42,23 @@ with `npm run fetch-data -- diorama`.
 | Key | Action |
 | --- | --- |
 | A / D (← / →) | carve heelside / toeside |
-| W (↑) | tuck |
+| W (↑) | tuck; push along on the flat |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
+| E | board a lift at its bottom station or a service centre (Space skips the ride) |
 | R | back to the top |
 
 ## How it's built
 
 - `scripts/fetch-data.mjs` bakes the world into `public/data/`:
-  elevation from AWS Terrain Tiles (Terrarium, z14 for the 4 km play area,
+  elevation from AWS Terrain Tiles (Terrarium, z14 for the 7.2 km play area,
   z11 for the 40 km horizon), plus pistes and lifts from OpenStreetMap via
   Overpass. Re-run with `npm run fetch-data` (it caches into `.cache/`).
+  The play area is off-centre (it reaches down to the service centres), but
+  coordinates stay relative to Gondola No. 6.
+- The terrain is cut into tiles that are frustum-culled and drop to half
+  resolution past 1.2 km. Far forest chunks are batched 4 × 4, and lift towers
+  and cars are instanced.
 - `src/render/toon.js` adds three flat tones, a wobbly terminator, shadow
   hatching and snow-surface strokes to `MeshLambertMaterial`, so shadows,
   fog and instancing still work.
@@ -59,7 +69,7 @@ with `npm run fetch-data -- diorama`.
   canvas texture, and the legs use two-bone IK.
 - `src/player/physics.js` handles slope gravity, edge grip that turns sideways
   slip back into forward speed, drag, ollies, natural take-offs on rollovers,
-  and tree crashes.
+  tree crashes, and walls (the map edge, lift stations and service centres).
 
 ## What's approximate
 
@@ -70,7 +80,7 @@ with `npm run fetch-data -- diorama`.
   along pistes, lift lines and around the lodges. Pistes are assumed to be
   about 34 m wide.
 - The two service centres are placed from OpenStreetMap (East) and the trail
-  map (West, beside 3号's bottom station); the buildings are stylised. In the
-  game they sit ~4.4 km down-valley, visible from high on the mountain.
+  map (West, beside 3号's bottom station); the buildings are stylised.
+- Lift rides are sped up to 10–22 s.
 
 Data © OpenStreetMap contributors (ODbL). Elevation: Mapzen / AWS Terrain Tiles.

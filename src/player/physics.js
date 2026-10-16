@@ -3,18 +3,25 @@
 // sideways velocity and feeds most of it back along the board (carving), so
 // turning costs a little speed rather than a lot. Leaving the ground happens
 // naturally when the terrain falls away faster than gravity can follow.
+// The edge of the heightfield and the buildings (`obstacles`, rotated boxes
+// { x, z, yaw, hw, hd }) are walls you slide along; only trees and bad
+// landings knock you over.
 import * as THREE from 'three';
 import { PISTE_HALF_WIDTH } from '../world/data.js';
 
 const G = 9.81;
+const SKATE_SPEED = 4.5; // W on the flat pushes you along up to this (m/s)
+const EDGE = 40; // metres kept clear of the heightfield's edge
 const _n = new THREE.Vector3(), _f = new THREE.Vector3(), _s = new THREE.Vector3();
 const _g = new THREE.Vector3(), _t = new THREE.Vector3();
 
 export class BoardPhysics {
-  constructor({ hf, piste, forest }) {
+  constructor({ hf, piste, forest, obstacles = [] }) {
     this.hf = hf;
     this.piste = piste;
     this.forest = forest;
+    this.obstacles = obstacles;
+    this.crashDir = new THREE.Vector3(); // travel direction when you went down
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
     this.normal = new THREE.Vector3(0, 1, 0);
@@ -42,10 +49,13 @@ export class BoardPhysics {
   get speed() { return this.vel.length(); }
   forward(out = new THREE.Vector3()) { return out.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)); }
 
-  crash(reason) {
+  crash(reason, tree = null) {
     if (this.crashed > 0) return;
     this.crashed = 2.2;
-    this.events.push({ type: 'crash', reason });
+    this.crashDir.set(this.vel.x, 0, this.vel.z);
+    if (this.crashDir.lengthSq() < 1) this.forward(this.crashDir);
+    this.crashDir.normalize();
+    this.events.push({ type: 'crash', reason, tree });
   }
 
   step(dt, input) {
@@ -55,6 +65,7 @@ export class BoardPhysics {
       this.vel.multiplyScalar(Math.exp(-dt * 2.5));
       this.pos.addScaledVector(this.vel, dt);
       this.pos.y = Math.max(this.pos.y + this.vel.y * dt, hf.heightAt(this.pos.x, this.pos.z));
+      this.#walls();
       if (this.crashed <= 0) this.events.push({ type: 'respawn' });
       return;
     }
@@ -70,10 +81,10 @@ export class BoardPhysics {
     if (this.grounded) this.#ground(dt, input, speed);
     else this.#air(dt);
 
-    if (!hf.inside(this.pos.x, this.pos.z, 40)) this.crash('edge');
+    this.#walls();
     const tree = this.forest.hit(this.pos.x, this.pos.z, 0.35);
     if (tree) {
-      if (this.vel.length() > 4.5) this.crash('tree');
+      if (this.vel.length() > 4.5) this.crash('tree', tree);
       else {
         _t.set(this.pos.x - tree.x, 0, this.pos.z - tree.z).normalize();
         this.pos.addScaledVector(_t, 0.05);
@@ -112,6 +123,9 @@ export class BoardPhysics {
     const dec = mu * G * n.y + drag * sp * sp;
     if (sp > 0) this.vel.multiplyScalar(Math.max(0, sp - dec * dt) / sp);
 
+    // Skating: on the flat (or to get going), W pushes off along the nose.
+    if (input.tuck && !input.brake && this.vel.dot(_f) < SKATE_SPEED) this.vel.addScaledVector(_f, 3.2 * dt);
+
     // Ollie: hold to load, release to pop.
     if (input.jump) this.jumpCharge = Math.min(1, this.jumpCharge + dt * 2.5);
     else if (this.jumpCharge > 0) {
@@ -139,6 +153,36 @@ export class BoardPhysics {
       const m2 = this.vel.length();
       if (m2 > 1e-4) this.vel.multiplyScalar((m * 0.999) / m2);
     }
+  }
+
+  // Slide along the map edge and building walls instead of passing through.
+  #walls() {
+    const { hf, pos, vel } = this;
+    const lim = hf.half - EDGE;
+    let hitWall = false;
+    for (const [axis, c] of [['x', hf.center[0]], ['z', hf.center[1]]]) {
+      const d = pos[axis] - c;
+      if (Math.abs(d) <= lim) continue;
+      pos[axis] = c + Math.sign(d) * lim;
+      if (vel[axis] * d > 0) vel[axis] = 0;
+      hitWall = true;
+    }
+    const r = 0.5;
+    for (const o of this.obstacles) {
+      const c = Math.cos(o.yaw), s = Math.sin(o.yaw);
+      const dx = pos.x - o.x, dz = pos.z - o.z;
+      const lx = dx * c - dz * s, lz = dx * s + dz * c; // box-local
+      const px = o.hw + r - Math.abs(lx), pz = o.hd + r - Math.abs(lz);
+      if (px <= 0 || pz <= 0) continue;
+      // Push out through the nearest face and drop the speed into it.
+      const [nx, nz, depth] = px < pz ? [c * Math.sign(lx), -s * Math.sign(lx), px] : [s * Math.sign(lz), c * Math.sign(lz), pz];
+      pos.x += nx * depth;
+      pos.z += nz * depth;
+      const vn = vel.x * nx + vel.z * nz;
+      if (vn < 0) { vel.x -= nx * vn; vel.z -= nz * vn; }
+      hitWall = true;
+    }
+    if (hitWall && this.grounded) pos.y = hf.heightAt(pos.x, pos.z);
   }
 
   #takeoff() {

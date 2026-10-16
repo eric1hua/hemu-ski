@@ -32,14 +32,28 @@ function station(width, depth, height) {
 
 // `scale` sizes towers, cable height and cars; `stationScale` the buildings;
 // `spacing` multiplies the gap between cars; `speed` is the haul rope in m/s.
+// Besides the meshes it returns `lines` (each lift's cable from points[0] to the
+// far end, for riding it) and `footprints` (station boxes, for collisions).
 export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacing: gap = 1, speed = 5 } = {}) {
   const group = new THREE.Group();
   const movers = [];
   const belts = [];
+  const lines = [];
+  const footprints = [];
   const towerGeo = mergeGeometries([
     new THREE.CylinderGeometry(0.35, 0.5, 1, 6).translate(0, 0.5, 0),
   ]);
   const armGeo = new THREE.BoxGeometry(7.5, 0.4, 0.5);
+  // Towers, arms and cars are instanced: there are hundreds of each.
+  const towerMats = [], armMats = [];
+  const _o = new THREE.Object3D();
+  const place = (list, x, y, z, ry, sx, sy = sx) => {
+    _o.position.set(x, y, z);
+    _o.rotation.set(0, ry, 0);
+    _o.scale.set(sx, sy, sx);
+    _o.updateMatrix();
+    list.push(_o.matrix.clone());
+  };
 
   for (const lift of lifts) {
     if (lift.type === 'magic_carpet') {
@@ -65,6 +79,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       st.position.copy(P);
       st.rotation.y = yaw + flip;
       group.add(st);
+      footprints.push({ x: P.x, z: P.z, yaw, hw: 7 * stationScale, hd: 9 * stationScale });
     }
 
     // Towers every ~140 m; the cable runs tower-to-tower at a fixed clearance.
@@ -76,16 +91,8 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       const y = hf.heightAt(x, z);
       pts.push(new THREE.Vector3(x, y + cableH, z));
       if (i === 0 || i === nT) continue;
-      const tower = new THREE.Mesh(towerGeo, mats.steel);
-      tower.scale.set(scale, cableH + 1, scale);
-      tower.position.set(x, y - 0.5, z);
-      tower.castShadow = true;
-      const arm = new THREE.Mesh(armGeo, mats.dark);
-      arm.position.set(x, y + cableH + 0.3, z);
-      arm.rotation.y = yaw + Math.PI / 2;
-      arm.scale.setScalar(scale);
-      arm.castShadow = true;
-      group.add(tower, arm);
+      place(towerMats, x, y - 0.5, z, 0, scale, cableH + 1);
+      place(armMats, x, y + cableH + 0.3, z, yaw + Math.PI / 2, scale);
     }
     pts[0].y = A.y + 6 * scale;
     pts[nT].y = B.y + 6 * scale;
@@ -99,23 +106,45 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       for (let i = 1; i < lane.length; i++) acc.push(acc[i - 1] + lane[i].distanceTo(lane[i - 1]));
       return acc;
     });
+    lines.push({ name: lift.name, type: lift.type, a: A, b: B, cable: lanes[0], acc: laneLen[0] });
 
     // Cabins / chairs riding the loop: up on one lane, down on the other.
     const spacing = (isGondola ? 55 : 25) * gap;
     const n = Math.floor(laneLen[0][laneLen[0].length - 1] / spacing);
     for (let laneIdx = 0; laneIdx < 2; laneIdx++) {
       for (let i = 0; i < n; i++) {
-        const car = isGondola ? gondolaCabin(i % 4 === 0) : chair();
-        car.scale.setScalar(scale);
-        group.add(car);
-        movers.push({ car, lane: lanes[laneIdx], acc: laneLen[laneIdx], s: i * spacing, up: laneIdx === 0, yaw });
+        const kind = isGondola ? (i % 4 === 0 ? 'red' : 'cabin') : 'chair';
+        movers.push({ kind, lane: lanes[laneIdx], acc: laneLen[laneIdx], s: i * spacing, up: laneIdx === 0, yaw });
       }
     }
+  }
+
+  const instanced = (geo, mat, count) => {
+    const im = new THREE.InstancedMesh(geo, mat, count);
+    im.castShadow = true;
+    im.frustumCulled = false; // instances span the whole map and move
+    group.add(im);
+    return im;
+  };
+  for (const [geo, mat, list] of [[towerGeo, mats.steel, towerMats], [armGeo, mats.dark, armMats]]) {
+    if (!list.length) continue;
+    const im = instanced(geo, mat, list.length);
+    list.forEach((m, i) => im.setMatrixAt(i, m));
+  }
+  const fleets = {};
+  for (const kind of ['cabin', 'red', 'chair']) {
+    const mine = movers.filter((m) => m.kind === kind);
+    if (!mine.length) continue;
+    const im = instanced(carGeometry(kind), carMat, mine.length);
+    mine.forEach((m, i) => { m.mesh = im; m.index = i; });
+    fleets[kind] = im;
   }
 
   const tmp = new THREE.Vector3();
   return {
     group,
+    lines,
+    footprints,
     update(dt) {
       for (const b of belts) b.tex.offset.y = (b.tex.offset.y - dt * b.rate) % 1;
       for (const m of movers) {
@@ -126,10 +155,13 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
         while (i < m.acc.length - 1 && m.acc[i] < d) i++;
         const t = (d - m.acc[i - 1]) / (m.acc[i] - m.acc[i - 1]);
         tmp.lerpVectors(m.lane[i - 1], m.lane[i], t);
-        m.car.position.copy(tmp);
-        m.car.rotation.y = m.yaw + (m.up ? 0 : Math.PI);
-        m.car.rotation.z = Math.sin(m.s * 0.3) * 0.03;
+        _o.position.copy(tmp);
+        _o.rotation.set(0, m.yaw + (m.up ? 0 : Math.PI), Math.sin(m.s * 0.3) * 0.03);
+        _o.scale.setScalar(scale);
+        _o.updateMatrix();
+        m.mesh.setMatrixAt(m.index, _o.matrix);
       }
+      for (const im of Object.values(fleets)) im.instanceMatrix.needsUpdate = true;
     },
   };
 }
@@ -209,14 +241,9 @@ function carGeometry(kind) {
   return g;
 }
 
-function gondolaCabin(red) {
+// A single cabin, e.g. the one the player rides in.
+export function gondolaCabin(red) {
   const m = new THREE.Mesh(carGeometry(red ? 'red' : 'cabin'), carMat);
-  m.castShadow = true;
-  return m;
-}
-
-function chair() {
-  const m = new THREE.Mesh(carGeometry('chair'), carMat);
   m.castShadow = true;
   return m;
 }
@@ -343,6 +370,8 @@ export function createServiceCentre(hf, { x, z, faceTo, roof, zh, en, ele }, { s
   );
   board.position.set(-W * 0.18, H + 3.6, D * 0.3 + 0.1);
   g.add(board);
+  // The plinth's outline, for collisions.
+  g.userData.footprint = { x, z, yaw, hw: W * 0.625 * scale, hd: D * 0.75 * scale };
   return g;
 }
 

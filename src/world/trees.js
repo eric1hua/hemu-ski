@@ -1,7 +1,8 @@
 // Conifer forest: jittered-grid placement, cleared along pistes, lift lines and
 // around buildings, thinning out toward the treeline. Like the resort's trail
 // map it is open country with clumps of trees, not a solid canopy. Instanced per 250 m chunk so frustum and
-// shadow culling work, with a cheaper mesh for far chunks.
+// shadow culling work, with a cheaper mesh for far chunks; far away, 4 × 4
+// chunks share one mesh to keep the draw calls down.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeToon } from '../render/toon.js';
@@ -68,7 +69,7 @@ function buildTreeGeometry(lod) {
 // diorama's toy proportions; `chunk` and `lodDistance` tune batching and LOD.
 // `density` is the share of grid spots that get a tree; `clearings` are
 // [{ x, z, r }] circles kept free (e.g. around base lodges).
-export function createForest(hf, piste, lifts, { treeline, spacing = 10, radius = 1800, scale = 1, chunk = 250, lodDistance = 450, density = 0.5, clearings = [] }) {
+export function createForest(hf, piste, lifts, { treeline, spacing = 10, scale = 1, chunk = 250, lodDistance = 450, density = 0.5, clearings = [] }) {
   const near = buildTreeGeometry(0);
   const far = buildTreeGeometry(1);
   const mat = makeToon({ vertexColors: true }, { hatch: 1 });
@@ -94,8 +95,8 @@ export function createForest(hf, piste, lifts, { treeline, spacing = 10, radius 
   const nrm = new THREE.Vector3();
   let count = 0;
 
-  for (let z = -radius; z < radius; z += spacing) {
-    for (let x = -radius; x < radius; x += spacing) {
+  for (let z = hf.z0; z < hf.z0 + hf.size; z += spacing) {
+    for (let x = hf.x0; x < hf.x0 + hf.size; x += spacing) {
       const jx = x + (hash(x, z) - 0.5) * spacing * 0.9;
       const jz = z + (hash(z + 3.3, x) - 0.5) * spacing * 0.9;
       if (!hf.inside(jx, jz, 30)) continue;
@@ -133,34 +134,49 @@ export function createForest(hf, piste, lifts, { treeline, spacing = 10, radius 
   }
 
   const group = new THREE.Group();
-  const lodChunks = [];
+  const make = (geo, mats, shadow) => {
+    const im = new THREE.InstancedMesh(geo, mat, mats.length);
+    mats.forEach((mm, i) => im.setMatrixAt(i, mm));
+    im.castShadow = shadow;
+    im.receiveShadow = false;
+    im.computeBoundingSphere();
+    group.add(im);
+    return im;
+  };
+  const SUPER = 4; // chunks per side of a far batch
+  const batches = new Map();
   for (const [key, mats] of chunks) {
     const [cx, cz] = key.split(',').map(Number);
     const center = new THREE.Vector3((cx + 0.5) * CH, 0, (cz + 0.5) * CH);
-    const make = (geo, shadow) => {
-      const im = new THREE.InstancedMesh(geo, mat, mats.length);
-      mats.forEach((mm, i) => im.setMatrixAt(i, mm));
-      im.castShadow = shadow;
-      im.receiveShadow = false;
-      im.computeBoundingSphere();
-      group.add(im);
-      return im;
-    };
-    const hi = make(near, true), lo = make(far, false);
     center.y = hf.heightAt(center.x, center.z);
-    lodChunks.push({ center, hi, lo });
+    const bk = `${Math.floor(cx / SUPER)},${Math.floor(cz / SUPER)}`;
+    let b = batches.get(bk);
+    if (!b) batches.set(bk, (b = { chunks: [], mats: [] }));
+    b.chunks.push({ center, hi: make(near, mats, true), lo: make(far, mats, false) });
+    b.mats.push(...mats);
   }
-  console.log(`forest: ${count} trees in ${chunks.size} chunks`);
+  for (const [bk, b] of batches) {
+    const [bx, bz] = bk.split(',').map(Number);
+    b.center = new THREE.Vector3((bx + 0.5) * CH * SUPER, 0, (bz + 0.5) * CH * SUPER);
+    b.center.y = hf.heightAt(b.center.x, b.center.z);
+    b.lo = make(far, b.mats, false);
+  }
+  // A batch takes over once all of its chunks are past the near-tree range.
+  const batchDistance = lodDistance + CH * SUPER * 0.75;
+  console.log(`forest: ${count} trees in ${chunks.size} chunks, ${batches.size} far batches`);
 
   return {
     group,
     count,
-    farMeshes: lodChunks.map((c) => c.lo),
+    farMeshes: [...batches.values()].flatMap((b) => [b.lo, ...b.chunks.map((c) => c.lo)]),
     update(camPos) {
-      for (const c of lodChunks) {
-        const d = c.center.distanceTo(camPos);
-        c.hi.visible = d < lodDistance;
-        c.lo.visible = !c.hi.visible;
+      for (const b of batches.values()) {
+        const far = b.center.distanceTo(camPos) > batchDistance;
+        b.lo.visible = far;
+        for (const c of b.chunks) {
+          c.hi.visible = !far && c.center.distanceTo(camPos) < lodDistance;
+          c.lo.visible = !far && !c.hi.visible;
+        }
       }
     },
     // Nearest trunk overlap with a circle at (x, z), or null.

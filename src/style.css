@@ -87,6 +87,18 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
   opacity: 0; transition: opacity 0.25s; white-space: nowrap;
 }
 #toast.show { opacity: 1; }
+/* Boarding prompt at a lift station, in the panel's paper style. */
+#prompt {
+  position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%);
+  background: var(--paper); border: 2.5px solid var(--ink); padding: 4px 16px 6px;
+  box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35); font-size: 22px; white-space: nowrap;
+  opacity: 0; transition: opacity 0.2s;
+}
+#prompt.show { opacity: 1; }
+#prompt kbd {
+  font-family: 'Patrick Hand SC', cursive; border: 2px solid var(--ink); border-radius: 5px;
+  padding: 0 7px; margin: 0 3px; background: #fff;
+}
 
 @media (max-width: 640px) {
   #minimap { width: 120px; height: 120px; }

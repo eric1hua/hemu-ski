@@ -19,7 +19,10 @@ const LIFT_BOTTOM = [87.5451301, 48.6223632];
 const LIFT_TOP = [87.5540669, 48.6295045];
 const ORIGIN = [(LIFT_BOTTOM[0] + LIFT_TOP[0]) / 2, (LIFT_BOTTOM[1] + LIFT_TOP[1]) / 2];
 
-const DETAIL = { size: 4000, cells: 500, zoom: 14 }; // 8 m grid, playable area
+// 8 m grid, playable area: the whole upper mountain plus the valley floor down to
+// the East and West service centres. Off-centre, but coordinates stay relative to
+// Gondola No. 6 (the block's centre is written to world.json).
+const DETAIL = { size: 7200, cells: 900, zoom: 14, center: [300, 1500] };
 const BACKDROP = { size: 40000, cells: 320, zoom: 11 }; // 125 m grid, horizon mountains
 // Tabletop block: all four lifts and the upper mountain, re-centred so the block's
 // middle is (0, 0). Coordinates in its world.json are relative to that centre.
@@ -232,7 +235,7 @@ async function main() {
   await fs.writeFile(path.join(OUT, 'backdrop.u16'), Buffer.from(b.q.buffer));
 
   console.log('Pistes + lifts…');
-  const { runs, lifts } = parseWays(await overpass(DETAIL, 'overpass.json'));
+  const { runs, lifts } = parseWays(await overpass(DETAIL, 'overpass-game.json'));
 
   const meta = {
     source: {
@@ -241,7 +244,7 @@ async function main() {
     },
     origin: { lon: ORIGIN[0], lat: ORIGIN[1] },
     liftLink: { name: '6号索道', osmWay: 1127891899 },
-    detail: { file: 'detail.u16', size: DETAIL.size, cells: DETAIL.cells, min: d.min, max: d.max },
+    detail: { file: 'detail.u16', size: DETAIL.size, cells: DETAIL.cells, center: DETAIL.center, min: d.min, max: d.max },
     backdrop: { file: 'backdrop.u16', size: BACKDROP.size, cells: BACKDROP.cells, min: b.min, max: b.max },
     runs,
     lifts,

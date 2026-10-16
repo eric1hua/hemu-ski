@@ -56,7 +56,7 @@ scene.add(sun, sun.target);
 // ---------- Diorama ----------
 const piste = new PisteField(meta.runs, hf.size, 8);
 const terrain = createDetailTerrain(hf, piste, TREELINE, { skirt: false });
-terrain.castShadow = true;
+terrain.traverse((o) => (o.castShadow = true));
 scene.add(terrain);
 const base = createBase(hf, {
   baseY,
@@ -73,7 +73,7 @@ const lodges = SERVICE_CENTRES.map((c) => {
   return { kind: 'lodge', ...at, group, top: new THREE.Vector3(at.x, group.position.y + 20 * LODGE_SCALE, at.z) };
 });
 const forest = createForest(hf, piste, meta.lifts, {
-  treeline: TREELINE, spacing: 34, radius: hf.half, scale: TREE_SCALE, chunk: 800, lodDistance: 2600, density: 0.45,
+  treeline: TREELINE, spacing: 34, scale: TREE_SCALE, chunk: 800, lodDistance: 2600, density: 0.45,
   clearings: lodges.map((l) => ({ x: l.x, z: l.z, r: 70 * LODGE_SCALE })),
 });
 scene.add(forest.group);

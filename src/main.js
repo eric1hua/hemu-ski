@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { loadWorld, PisteField, SERVICE_CENTRES } from './world/data.js';
+import { loadWorld, PisteField, SERVICE_CENTRES, PISTE_HALF_WIDTH } from './world/data.js';
 import { createDetailTerrain, createBackdrop } from './world/terrain.js';
 import { createForest } from './world/trees.js';
-import { createLifts, createPisteMarkers, createBanner, createServiceCentre } from './world/props.js';
+import { createLifts, createPisteMarkers, createBanner, createServiceCentre, gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
@@ -54,17 +54,18 @@ resize();
 const world = await loadWorld();
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
 const { detail, meta } = world;
-const piste = new PisteField(meta.runs, detail.size);
+const piste = new PisteField(meta.runs, detail.size, 4, 60, detail.center);
 const mainRun = meta.runs.find((r) => r.name === MAIN_RUN);
 
-scene.add(createDetailTerrain(detail, piste, TREELINE));
-const lodgeClearings = SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 250 }));
-const backdrop = createBackdrop(world.backdrop, detail.half, TREELINE, lodgeClearings);
+// The ride area runs from the summit down the valley to both service centres.
+const terrain = createDetailTerrain(detail, piste, TREELINE, { tiles: 9, lodDistance: 1200 });
+scene.add(terrain);
+const backdrop = createBackdrop(world.backdrop, detail, TREELINE);
 scene.add(backdrop);
-// The base lodges are down in the valley, off the ride area, on the backdrop.
-const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(world.backdrop, c));
+const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(detail, c));
 scene.add(...lodges);
-const forest = createForest(detail, piste, meta.lifts, { treeline: TREELINE });
+const lodgeClearings = SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 110 }));
+const forest = createForest(detail, piste, meta.lifts, { treeline: TREELINE, clearings: lodgeClearings });
 scene.add(forest.group);
 const lifts = createLifts(detail, meta.lifts);
 scene.add(lifts.group);
@@ -72,7 +73,8 @@ scene.add(createPisteMarkers(detail, meta.runs));
 const sky = createSky();
 scene.add(sky);
 
-// Course: start a few metres below the top station, finish at the bottom one.
+// Start a few metres below 6号's top station, at the head of Yunxiaofeng.
+// From there the whole mountain is open: there is no finish line.
 function along(points, dist) {
   let d = dist;
   for (let i = 0; i < points.length - 1; i++) {
@@ -91,15 +93,33 @@ function along(points, dist) {
 const runLength = mainRun.points.reduce((s, p, i, a) => (i ? s + Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) : 0), 0);
 const startAt = along(mainRun.points, 14);
 const gateAt = along(mainRun.points, 26);
-const finishAt = along(mainRun.points, runLength - 40);
 const yawOf = (dx, dz) => Math.atan2(-dx, -dz);
 scene.add(createBanner(detail, new THREE.Vector3(gateAt.x, 0, gateAt.z), new THREE.Vector3(-gateAt.dx, 0, -gateAt.dz), ['云霄峰道 · START', 'Yunxiaofeng · Gondola No.6'], '#f0c24a'));
-scene.add(createBanner(detail, new THREE.Vector3(finishAt.x, 0, finishAt.z), new THREE.Vector3(-finishAt.dx, 0, -finishAt.dz), ['FINISH · 终点', `${Math.round(runLength)} m · Hemu Jikepulin`], '#d9604c'));
+
+// Lifts you can ride: each one's cable from its bottom station to its top.
+// You board at the bottom station, or from a service centre's hall.
+const rides = lifts.lines.map((l) => {
+  const up = l.a.y <= l.b.y;
+  const cable = up ? l.cable : [...l.cable].reverse();
+  const acc = [0];
+  for (let i = 1; i < cable.length; i++) acc.push(acc[i - 1] + cable[i].distanceTo(cable[i - 1]));
+  const bottom = up ? l.a : l.b, top = up ? l.b : l.a;
+  const dir = new THREE.Vector3(top.x - bottom.x, 0, top.z - bottom.z).normalize();
+  const label = l.name || (l.type === 'gondola' ? 'Gondola' : 'Chair lift');
+  return { label, bottom, top, dir, cable, acc, length: acc[acc.length - 1] };
+});
+const boardSpots = [
+  ...SERVICE_CENTRES.map((c) => ({ ride: rides.find((r) => r.label === c.lift), x: c.x, z: c.z, r: 150, hall: c })),
+  ...rides.map((ride) => ({ ride, x: ride.bottom.x, z: ride.bottom.z, r: 60 })),
+].filter((s) => s.ride);
+const cabin = gondolaCabin(true);
+cabin.visible = false;
+scene.add(cabin);
 
 // ---------- Player ----------
 const rider = new Rider();
 scene.add(rider.root);
-const phys = new BoardPhysics({ hf: detail, piste, forest });
+const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)] });
 const trail = new Trail();
 const spray = new Spray();
 scene.add(trail.mesh, spray.points);
@@ -112,6 +132,8 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   sound.start();
   if (e.code === 'KeyR' && state === 'ride') startRun();
+  if (e.code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
+  else if ((e.code === 'KeyE' || e.code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
   if ((e.code === 'Enter' || e.code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -140,19 +162,15 @@ document.getElementById('panel-next').addEventListener('click', () => {
   if (panelNext) { const f = panelNext; panelNext = null; f(); }
 });
 
-let best = null;
-try { best = JSON.parse(localStorage.getItem('hemu-best')); } catch {}
-const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
-
 // ---------- Game state ----------
-let state = 'intro';
-let elapsed = 0, timing = false, topSpeed = 0, falls = 0;
+let state = 'intro'; // intro → ride ⇄ lift
+let elapsed = 0, timing = false, falls = 0;
 let camDir = new THREE.Vector3(startAt.dx, 0, startAt.dz);
 
 function startRun() {
   phys.reset(startAt.x, startAt.z, yawOf(startAt.dx, startAt.dz));
   trail.clear();
-  elapsed = 0; timing = false; topSpeed = 0; falls = 0;
+  elapsed = 0; timing = false; falls = 0;
   rider.pose.tumble = 0;
   camDir.set(startAt.dx, 0, startAt.dz);
   snapCamera();
@@ -161,26 +179,18 @@ function startRun() {
   hud.toast('Drop in!');
 }
 
-function finish() {
-  state = 'finish';
-  timing = false;
-  const isBest = best === null || elapsed < best;
-  if (isBest) { best = elapsed; try { localStorage.setItem('hemu-best', JSON.stringify(best)); } catch {} }
-  showPanel('Finish · 终点', `
-    <div class="big">${fmt(elapsed)}${isBest ? ' ★' : ''}</div>
-    <p>Top speed <b>${Math.round(topSpeed * 3.6)} km/h</b> · falls <b>${falls}</b> · best <b>${fmt(best)}</b></p>
-    <p class="dim">Hop back on Gondola No. 6 for another lap.</p>`, startRun);
-}
-
 phys.reset(startAt.x, startAt.z, yawOf(startAt.dx, startAt.dz));
 showPanel('Hemu · 禾木', `
   <p>Top of <b>Gondola No. 6</b>, Hemu Jikepulin, Altay — 2,756 m.
-  Below you: <b>云霄峰道 Yunxiaofeng</b>, ${Math.round(runLength)} m and 460 m of drop to the bottom station.</p>
+  The whole mountain is yours: drop into <b>云霄峰道 Yunxiaofeng</b> (${Math.round(runLength)} m) or ride anywhere,
+  all the way down the valley to the <b>East Service Centre</b> (东区服务大厅), 1,300 m below.
+  Board a gondola there, or at any lift's bottom station, to head back up.</p>
   <div class="keys">
     <span><kbd>A</kbd><kbd>D</kbd></span><span>carve heelside / toeside</span>
-    <span><kbd>W</kbd></span><span>tuck for speed</span>
+    <span><kbd>W</kbd></span><span>tuck for speed · push along on the flat</span>
     <span><kbd>S</kbd></span><span>skid to scrub speed</span>
     <span><kbd>Space</kbd></span><span>hold and release to ollie · spin in the air</span>
+    <span><kbd>E</kbd></span><span>board a lift at its station</span>
     <span><kbd>R</kbd></span><span>back to the top</span>
   </div>
   <p class="dim">Terrain: real elevation data. Runs and lifts: OpenStreetMap / OpenSkiMap.</p>`, startRun);
@@ -277,13 +287,12 @@ function frame() {
     while (acc >= STEP) { phys.step(STEP, input); acc -= STEP; }
     for (const ev of phys.events.splice(0)) {
       if (ev.type === 'crash') { falls++; hud.toast(ev.reason === 'tree' ? 'Tree!' : 'Wipeout!'); trail.gap(phys.pos); }
-      if (ev.type === 'respawn') respawnOnRun();
+      if (ev.type === 'respawn') respawnInPlace();
       if (ev.type === 'air') hud.toast(ev.spin >= 180 ? `${ev.spin}°!` : `Air ${ev.time.toFixed(1)}s`);
     }
     if (!timing && phys.pos.distanceTo(new THREE.Vector3(startAt.x, phys.pos.y, startAt.z)) > 3) timing = true;
     if (timing) elapsed += dt;
-    topSpeed = Math.max(topSpeed, phys.speed);
-    if (Math.hypot(phys.pos.x - finishAt.x, phys.pos.z - finishAt.z) < 20) finish();
+    updateBoarding();
 
     // Board track + spray.
     phys.forward(_f);
@@ -302,15 +311,12 @@ function frame() {
     updateRideCamera(dt);
     hud.update(phys, elapsed);
     sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded);
-  } else if (state === 'finish') {
-    const coast = { steer: 0, tuck: false, brake: true, jump: false };
-    acc += dt;
-    while (acc >= STEP) { phys.step(STEP, coast); acc -= STEP; }
-    phys.events.length = 0;
-    Object.assign(input, coast);
-    poseRider(dt);
-    updateRideCamera(dt);
-    sound.update(phys.speed, phys.slip + 4, phys.grounded);
+  } else if (state === 'lift') {
+    const label = `${liftRide.ride.label} ↑`;
+    updateLift(dt); // may step you off at the top
+    if (timing) elapsed += dt;
+    hud.update(phys, elapsed, state === 'lift' ? label : null);
+    sound.update(0, 0, false);
   } else {
     poseRider(dt);
     if (state === 'intro') updateIntroCamera(dt);
@@ -320,6 +326,7 @@ function frame() {
   spray.update(dt);
   lifts.update(dt);
   forest.update(camera.position);
+  terrain.update(camera.position);
   if (debug.cam) debug.cam(camera, phys);
   sky.position.copy(camera.position);
   sky.material.uniforms.uTime.value = time;
@@ -327,32 +334,127 @@ function frame() {
   sun.position.copy(phys.pos).addScaledVector(sunDir, 250);
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, spray.points, backdrop, ...lodges, ...forest.farMeshes]);
+  post.render(scene, camera, time, [sky, spray.points, backdrop, ...forest.farMeshes]);
   requestAnimationFrame(frame);
 }
 
-function respawnOnRun() {
-  // Nearest point on the main run, nudged back uphill a little.
-  let best = { d: Infinity, s: 0 }, s = 0;
-  const p = mainRun.points;
-  for (let i = 0; i < p.length - 1; i++) {
-    const a = p[i], b = p[i + 1];
-    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    for (let t = 0; t <= L; t += 4) {
-      const x = a[0] + ((b[0] - a[0]) * t) / L, z = a[1] + ((b[1] - a[1]) * t) / L;
-      const d = Math.hypot(x - phys.pos.x, z - phys.pos.z);
-      if (d < best.d) best = { d, s: s + t };
-    }
-    s += L;
+// Back on your feet where you came to rest, heading the way you were going.
+// After a tree you're set beside its trunk, on the side you were passing it.
+const _n = new THREE.Vector3(), _d = new THREE.Vector3();
+function respawnInPlace() {
+  const dir = _d.copy(phys.crashDir);
+  let x = phys.pos.x, z = phys.pos.z;
+  for (let i = 0; i < 6; i++) {
+    const t = forest.hit(x, z, 1.2);
+    if (!t) break;
+    const sx = -dir.z, sz = dir.x;
+    const side = Math.sign((x - t.x) * sx + (z - t.z) * sz) || 1;
+    x = t.x + sx * side * (t.r + 1.5);
+    z = t.z + sz * side * (t.r + 1.5);
   }
-  const at = along(p, Math.max(14, best.s - 15));
-  phys.reset(at.x, at.z, yawOf(at.dx, at.dz));
-  camDir.set(at.dx, 0, at.dz);
+  // Don't restart facing up the hill: turn across it instead.
+  detail.normalAt(x, z, _n);
+  const fall = _w.set(_n.x, 0, _n.z);
+  if (fall.lengthSq() > 1e-4) {
+    fall.normalize();
+    const d = dir.dot(fall);
+    if (d < 0.1) dir.addScaledVector(fall, 0.4 - d).normalize();
+  }
+  phys.reset(x, z, yawOf(dir.x, dir.z));
+  camDir.copy(dir);
   snapCamera();
   trail.gap(phys.pos);
 }
 
+// ---------- Lifts ----------
+let boardable = null, atHall = null;
+function updateBoarding() {
+  boardable = null;
+  if (phys.crashed <= 0 && phys.grounded) {
+    let bestD = Infinity;
+    for (const s of boardSpots) {
+      const d = Math.hypot(phys.pos.x - s.x, phys.pos.z - s.z);
+      if (d < s.r && d < bestD) { bestD = d; boardable = s; }
+    }
+  }
+  const hall = boardable?.hall ?? null;
+  if (hall && hall !== atHall) hud.toast(hall.zh, 2200);
+  atHall = hall;
+  hud.prompt(boardable
+    ? `${hall ? `${hall.en} · ` : ''}<kbd>E</kbd> ride <b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`
+    : '');
+}
+
+let liftRide = null;
+const _c = new THREE.Vector3();
+function board(ride) {
+  state = 'lift';
+  // Sped up: 1–2 km of cable in 10–22 s.
+  liftRide = { ride, t: 0, dur: THREE.MathUtils.clamp(ride.length / 110, 10, 22) };
+  rider.root.visible = false;
+  cabin.visible = true;
+  cabin.rotation.set(0, Math.atan2(ride.dir.x, ride.dir.z), 0);
+  phys.vel.set(0, 0, 0);
+  trail.gap(phys.pos);
+  hud.prompt('<kbd>Space</kbd> skip the ride');
+  updateLift(0);
+  camera.position.copy(_w);
+}
+
+function updateLift(dt) {
+  const L = liftRide, { ride } = L;
+  L.t = Math.min(L.dur, L.t + dt);
+  const u = L.t / L.dur;
+  const s = (u - Math.sin(u * Math.PI * 2) / (Math.PI * 2)) * ride.length; // eased start and stop
+  let i = 1;
+  while (i < ride.acc.length - 1 && ride.acc[i] < s) i++;
+  cabin.position.lerpVectors(ride.cable[i - 1], ride.cable[i], (s - ride.acc[i - 1]) / (ride.acc[i] - ride.acc[i - 1]));
+  cabin.rotation.z = Math.sin(L.t * 1.3) * 0.02;
+  phys.pos.copy(cabin.position);
+  // Camera off the cabin's flank, looking up the line past it.
+  _c.set(-ride.dir.z, 0, ride.dir.x);
+  _w.copy(cabin.position).addScaledVector(ride.dir, -14).addScaledVector(_c, 5);
+  _w.y = Math.max(_w.y + 1, detail.heightAt(_w.x, _w.z) + 2);
+  camera.position.lerp(_w, 1 - Math.exp(-dt * 4));
+  _look.copy(cabin.position).addScaledVector(ride.dir, 6);
+  _look.y -= 3;
+  camLook.copy(_look);
+  camera.lookAt(camLook);
+  camera.fov = 58;
+  camera.updateProjectionMatrix();
+  if (L.t >= L.dur) unload(ride);
+}
+
+// Step off at the top station onto the best open snow nearby, facing downhill.
+function unload(ride) {
+  const P = ride.top;
+  const blocked = (x, z) => phys.obstacles.some((o) => Math.hypot(x - o.x, z - o.z) < Math.hypot(o.hw, o.hd) + 3);
+  let best = null;
+  for (const R of [26, 36, 48]) { // within reach of a lift that starts here
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      const x = P.x + Math.cos(a) * R, z = P.z + Math.sin(a) * R;
+      if (!detail.inside(x, z, 60) || blocked(x, z) || forest.hit(x, z, 3)) continue;
+      detail.normalAt(x, z, _n);
+      const slope = 1 - _n.y;
+      const score = (piste.distAt(x, z) < PISTE_HALF_WIDTH ? 1 : 0) + Math.min(slope, 0.12) * 6 - R * 0.004;
+      if (!best || score > best.score) best = { x, z, score, dx: _n.x, dz: _n.z };
+    }
+  }
+  const at = best ?? { x: P.x + ride.dir.x * 30, z: P.z + ride.dir.z * 30, dx: ride.dir.x, dz: ride.dir.z };
+  const len = Math.hypot(at.dx, at.dz) || 1;
+  phys.reset(at.x, at.z, yawOf(at.dx / len, at.dz / len));
+  camDir.set(at.dx / len, 0, at.dz / len);
+  snapCamera();
+  rider.root.visible = true;
+  cabin.visible = false;
+  liftRide = null;
+  state = 'ride';
+  hud.prompt('');
+  hud.toast(`${ride.label} · ${Math.round(P.y).toLocaleString()} m`, 2000);
+}
+
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, get state() { return state; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, get state() { return state; } };
 requestAnimationFrame(frame);
