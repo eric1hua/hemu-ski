@@ -107,7 +107,8 @@ function addSkirt(g, hf) {
   g.setIndex(idx);
 }
 
-export function createBackdrop(hf, detailHalf, treeline) {
+// `clearings` ([{ x, z, r }]) open the taiga up around buildings.
+export function createBackdrop(hf, detailHalf, treeline, clearings = []) {
   // Sink the part that sits under the detailed terrain.
   const g = gridGeometry(hf, (x, z) => (Math.abs(x) < detailHalf - 20 && Math.abs(z) < detailHalf - 20 ? -80 : 0));
   const pos = g.attributes.position, nrm = g.attributes.normal;
@@ -119,8 +120,11 @@ export function createBackdrop(hf, detailHalf, treeline) {
     const n = vnoise(x * 0.0015, z * 0.0015);
     c.copy(C.snow).lerp(C.snowShade, n);
     // Taiga covers the valleys and lower slopes of the Altai.
-    const forest = THREE.MathUtils.smoothstep(treeline + 120 - y + (n - 0.5) * 250, 0, 150) *
+    let forest = THREE.MathUtils.smoothstep(treeline + 120 - y + (n - 0.5) * 250, 0, 150) *
       (1 - THREE.MathUtils.smoothstep(slope, 30, 40));
+    // Stands of trees with snowy meadows between them, as on the trail map.
+    forest *= 0.3 + 0.7 * THREE.MathUtils.smoothstep(vnoise(x * 0.0011 + 7, z * 0.0011), 0.38, 0.62);
+    for (const cl of clearings) forest *= 0.3 + 0.7 * THREE.MathUtils.smoothstep(Math.hypot(x - cl.x, z - cl.z), cl.r, cl.r * 3);
     c.lerp(n > 0.5 ? C.forest : C.forestDark, forest * 0.85);
     const rockT = THREE.MathUtils.smoothstep(slope, 33, 42);
     c.lerp(C.rockDark, rockT * 0.8);

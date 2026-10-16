@@ -290,6 +290,62 @@ function textTexture(lines, bg, fg) {
   return t;
 }
 
+// A base lodge like the ones on the resort's trail map: a long stone-and-glass
+// hall under two folded shed roofs, a timber upper floor, an entrance canopy
+// and a name board, with a plinth that steps down to the lowest ground under it.
+// Its front faces `faceTo` (the nearby lift station). `scale` 1 is ~96 m long.
+export function createServiceCentre(hf, { x, z, faceTo, roof, zh, en, ele }, { scale = 1 } = {}) {
+  const W = 96, D = 34, H = 10;
+  const g = new THREE.Group();
+  const yaw = Math.atan2(faceTo[0] - x, faceTo[1] - z);
+  // Lowest and highest ground under the (scaled, rotated) footprint.
+  let lo = Infinity, hi = -Infinity;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  for (let u = -0.5; u <= 0.5; u += 0.125)
+    for (let v = -0.5; v <= 0.5; v += 0.25) {
+      const lx = u * W * 1.3 * scale, lz = v * D * 1.6 * scale;
+      const h = hf.heightAt(x + lx * c + lz * s, z - lx * s + lz * c);
+      lo = Math.min(lo, h); hi = Math.max(hi, h);
+    }
+  g.position.set(x, hi, z);
+  g.rotation.y = yaw;
+  g.scale.setScalar(scale);
+  const sink = (hi - lo) / scale + 2;
+
+  const roofMat = makeToon({ color: roof }, { rim: 1 });
+  const add = (geo, mat, px, py, pz) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(px, py, pz);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  // Plinth / snow-cleared terrace, then the ground floor with its glass front.
+  add(new THREE.BoxGeometry(W * 1.25, sink, D * 1.5), mats.wall, 0, -sink / 2 + 0.4, 0);
+  add(new THREE.BoxGeometry(W, H, D), mats.wall, 0, H / 2, 0);
+  add(new THREE.BoxGeometry(W * 0.86, H * 0.6, 0.6), mats.glass, 0, H * 0.42, D / 2);
+  // Timber upper floor, set back, under two shed roofs folding opposite ways.
+  add(new THREE.BoxGeometry(W * 0.94, 7, D * 0.72), mats.wood, 0, H + 3.5, -D * 0.06);
+  const slab = (w, px, tilt) => {
+    const r = add(new THREE.BoxGeometry(w, 1.2, D * 0.95), roofMat, px, H + 7.3 + Math.tan(Math.abs(tilt)) * w * 0.5, -D * 0.04);
+    r.rotation.z = tilt;
+  };
+  slab(W * 0.54, -W * 0.24, -0.16);
+  slab(W * 0.5, W * 0.25, 0.11);
+  // Entrance canopy on posts.
+  add(new THREE.BoxGeometry(22, 1, 9), roofMat, W * 0.12, H * 0.62, D / 2 + 4.2);
+  for (const px of [-9, 9]) add(new THREE.CylinderGeometry(0.4, 0.4, H * 0.6, 6), mats.dark, W * 0.12 + px, H * 0.3, D / 2 + 8);
+  // Name board above the entrance, readable from the lift station.
+  const board = new THREE.Mesh(
+    new THREE.PlaneGeometry(34, 8.5),
+    new THREE.MeshBasicMaterial({ map: textTexture([zh, `${en} · ${ele} m`], '#fbfaf5', '#23303a') }),
+  );
+  board.position.set(-W * 0.18, H + 3.6, D * 0.3 + 0.1);
+  g.add(board);
+  return g;
+}
+
 // An inflatable-style arch across the run, facing up-slope.
 export function createBanner(hf, at, facing, lines, color) {
   const g = new THREE.Group();

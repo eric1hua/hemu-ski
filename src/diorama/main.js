@@ -4,10 +4,10 @@
 // terrain, forest, lift, rider and ink-rendering modules at toy proportions.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadWorld, PisteField } from '../world/data.js';
+import { loadWorld, PisteField, SERVICE_CENTRES } from '../world/data.js';
 import { createDetailTerrain } from '../world/terrain.js';
 import { createForest } from '../world/trees.js';
-import { createLifts } from '../world/props.js';
+import { createLifts, createServiceCentre } from '../world/props.js';
 import { createSky, SKY } from '../world/sky.js';
 import { InkPost } from '../render/post.js';
 import { toonUniforms } from '../render/toon.js';
@@ -15,11 +15,12 @@ import { createBase } from './base.js';
 import { Skiers } from './skiers.js';
 import { RunMap } from './runs.js';
 
-const TREELINE = 2480;
+const TREELINE = 2350;
 // Toy proportions: props are oversized so they read from across the table.
 const LIFT_SCALE = 5;
 const STATION_SCALE = 3.2;
 const TREE_SCALE = 2.8;
+const LODGE_SCALE = 1.8;
 const RIDER_SCALE = 8;
 const RIDERS = 56;
 
@@ -64,8 +65,16 @@ const base = createBase(hf, {
   subtitle: `Altay, Xinjiang · ${Math.round(meta.detail.min).toLocaleString()}–${Math.round(top).toLocaleString()} m · ${meta.runs.length} runs · ${meta.lifts.length} lifts`,
 });
 scene.add(base.group);
+// Base lodges, moved from game coordinates into the block's.
+const lodges = SERVICE_CENTRES.map((c) => {
+  const at = { ...c, x: c.x - meta.center.x, z: c.z - meta.center.z, faceTo: [c.faceTo[0] - meta.center.x, c.faceTo[1] - meta.center.z] };
+  const group = createServiceCentre(hf, at, { scale: LODGE_SCALE });
+  scene.add(group);
+  return { kind: 'lodge', ...at, group, top: new THREE.Vector3(at.x, group.position.y + 20 * LODGE_SCALE, at.z) };
+});
 const forest = createForest(hf, piste, meta.lifts, {
-  treeline: TREELINE, spacing: 34, radius: hf.half, scale: TREE_SCALE, chunk: 800, lodDistance: 2600,
+  treeline: TREELINE, spacing: 34, radius: hf.half, scale: TREE_SCALE, chunk: 800, lodDistance: 2600, density: 0.45,
+  clearings: lodges.map((l) => ({ x: l.x, z: l.z, r: 70 * LODGE_SCALE })),
 });
 scene.add(forest.group);
 const lifts = createLifts(hf, meta.lifts, { scale: LIFT_SCALE, stationScale: STATION_SCALE, spacing: 2.4, speed: 14 });
@@ -168,6 +177,8 @@ window.addEventListener('pointerup', (e) => {
 function pick() {
   if (!pointerIn || dragging) return null;
   const w = window.innerWidth, h = window.innerHeight;
+  const lodge = nearestLodge(w, h);
+  if (lodge) return lodge;
   const lift = runMap.nearestLift(mouse, camera, w, h, 9);
   if (lift) return lift;
   ndc.set((mouse.x / w) * 2 - 1, -(mouse.y / h) * 2 + 1);
@@ -178,11 +189,28 @@ function pick() {
   return runMap.nearestRun(hit.x, hit.z, Math.max(20, mPerPx * 10));
 }
 
+// A lodge is hovered within its on-screen half-length of its roof.
+const lp = new THREE.Vector3();
+function nearestLodge(w, h) {
+  const pxPerM = h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  for (const l of lodges) {
+    lp.copy(l.top).project(camera);
+    if (lp.z > 1) continue;
+    const r = Math.max(12, (55 * LODGE_SCALE * pxPerM) / camera.position.distanceTo(l.top));
+    if (Math.hypot((lp.x + 1) * w / 2 - mouse.x, (1 - lp.y) * h / 2 - mouse.y) < r) return l;
+  }
+  return null;
+}
+const describeLodge = (l) => ({
+  badge: 'lodge', zh: l.zh, en: l.en,
+  rows: [[`${l.ele.toLocaleString()} m`, ''], ['Tickets · food · rental · first aid', '']],
+});
+
 function showTip(item) {
-  runMap.setHot(item);
+  runMap.setHot(item?.kind === 'lodge' ? null : item);
   canvas.style.cursor = item ? 'pointer' : dragging ? 'grabbing' : 'grab';
   if (!item) { tip.classList.add('hidden'); return; }
-  const d = runMap.describe(item);
+  const d = item.kind === 'lodge' ? describeLodge(item) : runMap.describe(item);
   tip.querySelector('.badge').className = `badge ${d.badge}`;
   tip.querySelector('.zh').textContent = d.zh;
   tip.querySelector('.en').textContent = d.en;

@@ -16,12 +16,17 @@ npm install
 npm run dev
 ```
 
+Or double-click `scripts/Hemu Ski.command` (a symlink to it on the Desktop works
+too). It starts the server on port 5190 and opens the game. Close the Terminal
+window to stop the server.
+
 ## Diorama
 
 `npm run dev`, then open `/diorama.html`: the whole resort as a tabletop model.
 All 87 runs and 10 lifts in a 6.4 km block, cut out of the real terrain and set
 on a walnut plinth. Drag to spin it, scroll to zoom, and hover a run or lift to
-see its name, length and drop. Gondolas and chairs run on their cables, and
+see its name, length and drop. The East and West service centres
+(东区/西区服务大厅) stand at the foot of 1号 and 3号 gondolas; hover them too. Gondolas and chairs run on their cables, and
 little riders carve down the runs and chain from one run onto the next.
 
 It reuses the game's modules at toy proportions (oversized trees, lifts and
@@ -60,7 +65,12 @@ with `npm run fetch-data -- diorama`.
 
 - The DEM comes from ~30 m source data and is smoothed, so small bumps and
   terrain-park features aren't there.
-- Forest cover is procedural: trees grow below a ~2,480 m treeline and are
-  cleared along pistes and lift lines. Pistes are assumed to be about 34 m wide.
+- Forest cover is procedural, thinned to match the resort's 2023–24 trail map:
+  open snowfields up high, scattered stands below a ~2,350 m treeline, cleared
+  along pistes, lift lines and around the lodges. Pistes are assumed to be
+  about 34 m wide.
+- The two service centres are placed from OpenStreetMap (East) and the trail
+  map (West, beside 3号's bottom station); the buildings are stylised. In the
+  game they sit ~4.4 km down-valley, visible from high on the mountain.
 
 Data © OpenStreetMap contributors (ODbL). Elevation: Mapzen / AWS Terrain Tiles.

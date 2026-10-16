@@ -111,3 +111,12 @@ export class PisteField {
 }
 
 export const PISTE_HALF_WIDTH = 17;
+
+// The two base lodges at the foot of the resort, in the game's local metres
+// (relative to Gondola No. 6; the diorama subtracts its block centre). East sits
+// on its OpenStreetMap node beside 1号索道's bottom station, West beside 3号索道's.
+// Elevations are the ones printed on the resort's 2023–24 trail map.
+export const SERVICE_CENTRES = [
+  { id: 'east', zh: '东区服务大厅', en: 'East Service Centre', ele: 1439, x: 710, z: 4410, faceTo: [610, 4280], roof: '#5f8064' },
+  { id: 'west', zh: '西区服务大厅', en: 'West Service Centre', ele: 1383, x: -1240, z: 4640, faceTo: [-1183, 4512], roof: '#4a5661' },
+];

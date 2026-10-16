@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { loadWorld, PisteField } from './world/data.js';
+import { loadWorld, PisteField, SERVICE_CENTRES } from './world/data.js';
 import { createDetailTerrain, createBackdrop } from './world/terrain.js';
 import { createForest } from './world/trees.js';
-import { createLifts, createPisteMarkers, createBanner } from './world/props.js';
+import { createLifts, createPisteMarkers, createBanner, createServiceCentre } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
@@ -13,7 +13,7 @@ import { Hud } from './hud.js';
 import { Sound } from './audio.js';
 
 const MAIN_RUN = '云霄峰道'; // Yunxiaofeng — the run under Gondola No. 6
-const TREELINE = 2480;
+const TREELINE = 2350;
 const G = 9.81;
 
 const canvas = document.getElementById('game');
@@ -58,8 +58,12 @@ const piste = new PisteField(meta.runs, detail.size);
 const mainRun = meta.runs.find((r) => r.name === MAIN_RUN);
 
 scene.add(createDetailTerrain(detail, piste, TREELINE));
-const backdrop = createBackdrop(world.backdrop, detail.half, TREELINE);
+const lodgeClearings = SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 250 }));
+const backdrop = createBackdrop(world.backdrop, detail.half, TREELINE, lodgeClearings);
 scene.add(backdrop);
+// The base lodges are down in the valley, off the ride area, on the backdrop.
+const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(world.backdrop, c));
+scene.add(...lodges);
 const forest = createForest(detail, piste, meta.lifts, { treeline: TREELINE });
 scene.add(forest.group);
 const lifts = createLifts(detail, meta.lifts);
@@ -323,7 +327,7 @@ function frame() {
   sun.position.copy(phys.pos).addScaledVector(sunDir, 250);
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, spray.points, backdrop, ...forest.farMeshes]);
+  post.render(scene, camera, time, [sky, spray.points, backdrop, ...lodges, ...forest.farMeshes]);
   requestAnimationFrame(frame);
 }
 

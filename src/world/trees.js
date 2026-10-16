@@ -1,5 +1,6 @@
-// Conifer forest: jittered-grid placement, cleared along pistes and lift lines,
-// thinning out toward the treeline. Instanced per 250 m chunk so frustum and
+// Conifer forest: jittered-grid placement, cleared along pistes, lift lines and
+// around buildings, thinning out toward the treeline. Like the resort's trail
+// map it is open country with clumps of trees, not a solid canopy. Instanced per 250 m chunk so frustum and
 // shadow culling work, with a cheaper mesh for far chunks.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -65,7 +66,9 @@ function buildTreeGeometry(lod) {
 
 // `scale` grows every tree (and the clearings around runs and lifts) for the
 // diorama's toy proportions; `chunk` and `lodDistance` tune batching and LOD.
-export function createForest(hf, piste, lifts, { treeline, spacing = 10, radius = 1800, scale = 1, chunk = 250, lodDistance = 450 }) {
+// `density` is the share of grid spots that get a tree; `clearings` are
+// [{ x, z, r }] circles kept free (e.g. around base lodges).
+export function createForest(hf, piste, lifts, { treeline, spacing = 10, radius = 1800, scale = 1, chunk = 250, lodDistance = 450, density = 0.5, clearings = [] }) {
   const near = buildTreeGeometry(0);
   const far = buildTreeGeometry(1);
   const mat = makeToon({ vertexColors: true }, { hatch: 1 });
@@ -107,7 +110,9 @@ export function createForest(hf, piste, lifts, { treeline, spacing = 10, radius 
       if (liftDist(jx, jz) < 9 + clear) continue;
       hf.normalAt(jx, jz, nrm);
       if (nrm.y < 0.78) continue; // cliffs
-      if (vnoise(jx * 0.012 + 40, jz * 0.012) < 0.28) continue; // glades
+      if (vnoise(jx * 0.012 + 40, jz * 0.012) < 0.42) continue; // glades
+      if (hash(jx + 5.1, jz * 0.7) > density) continue;
+      if (clearings.some((c) => Math.hypot(jx - c.x, jz - c.z) < c.r + clear)) continue;
 
       const ts = (0.75 + hash(jz, jx * 2.1) * 0.55) * (1 - nearLine * 0.4) * scale;
       q.setFromAxisAngle(up, hash(jx, jz + 9) * Math.PI * 2);

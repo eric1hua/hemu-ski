@@ -43,6 +43,7 @@
   background: inherit; border: 2px solid var(--ink); box-sizing: content-box; margin: -2px;
 }
 .badge.lift { background: var(--accent); border-radius: 4px; width: 18px; height: 12px; }
+.badge.lodge { background: #5f8064; border-radius: 6px 6px 1px 1px; width: 18px; height: 14px; }
 
 .dio-tip {
   position: fixed; left: 0; top: 0; pointer-events: none; z-index: 5;
