@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makeToon } from '../render/toon.js';
 import { PISTE_HALF_WIDTH } from './data.js';
 
@@ -8,6 +9,7 @@ const mats = {
   dark: makeToon({ color: '#3a4249' }),
   cabin: makeToon({ color: '#f0c24a' }, { rim: 1 }),
   cabinRed: makeToon({ color: '#d9604c' }, { rim: 1 }),
+  cabinGray: makeToon({ color: '#aeb5b8' }, { rim: 1 }),
   glass: makeToon({ color: '#2f4752' }),
   wall: makeToon({ color: '#d8cfc0' }),
   roof: makeToon({ color: '#4f6f7a' }),
@@ -30,6 +32,137 @@ function station(width, depth, height) {
   return g;
 }
 
+// Cabin paint per gondola line, as on the resort: No. 6 grey, No. 2 yellow,
+// the rest red. Chairs keep their own colours.
+const CABIN_PAINT = { '6号索道': 'gray', '2号索道': 'yellow' };
+const PAINT = { red: null, yellow: '#f0c24a', gray: '#aeb5b8' }; // null: the model's own red
+export const cabinPaint = (liftName) => CABIN_PAINT[liftName] || 'red';
+
+// Tripo-made lift models (public/models/lifts). Until they load — or if they
+// fail to — the box cars and stations above stand in.
+// Cars are sized to these heights (grip to the bottom of the car) and moved so
+// the origin sits in the grip's cable slot; +z is the direction of travel.
+// The station is sized to 18 m long, its open end (+z) facing the line.
+const CABIN_H = 4.2, CHAIR_H = 3.0, STATION_L = 18;
+const MODEL_DIR = import.meta.env.BASE_URL + 'models/lifts/';
+let modelsLoading = null;
+export function loadLiftModels() {
+  return (modelsLoading ||= (async () => {
+    const loader = new GLTFLoader();
+    const [cabin, chair, station] = await Promise.all(
+      ['cabin', 'chair', 'station'].map((n) => loader.loadAsync(`${MODEL_DIR}${n}.glb`).then(meshOf)),
+    );
+    const cabinGeo = hangFromGrip(cabin.geometry, CABIN_H);
+    const stationGeo = station.geometry;
+    stationGeo.computeBoundingBox();
+    const sb = stationGeo.boundingBox;
+    const s = STATION_L / (sb.max.z - sb.min.z);
+    stationGeo.translate(-(sb.min.x + sb.max.x) / 2, -sb.min.y, -(sb.min.z + sb.max.z) / 2).scale(s, s, s);
+    stationGeo.computeBoundingBox();
+    const toon = (m, map) => makeToon({ map, side: m.side }, { rim: 1 });
+    return {
+      cabin: cabinGeo,
+      cabinMats: Object.fromEntries(Object.entries(PAINT).map(([k, hex]) => [k, toon(cabin.material, hex ? repaintRed(cabin.material.map, hex) : cabin.material.map)])),
+      chair: hangFromGrip(chair.geometry, CHAIR_H),
+      chairMat: toon(chair.material, chair.material.map),
+      station: stationGeo,
+      stationMat: makeToon({ map: station.material.map }),
+      stationHalfWidth: stationGeo.boundingBox.max.x,
+      stationHeight: stationGeo.boundingBox.max.y,
+    };
+  })());
+}
+
+// The GLB's single mesh, with its node transform baked into the geometry.
+function meshOf(gltf) {
+  let mesh = null;
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
+  const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+  return { geometry, material: mesh.material };
+}
+
+// Scale a car to `height` and put the origin in its grip: the middle of the top
+// few percent of the model, where the cable passes.
+function hangFromGrip(geo, height) {
+  geo.computeBoundingBox();
+  const { min, max } = geo.boundingBox;
+  const s = height / (max.y - min.y);
+  const cut = (max.y - (max.y - min.y) * 0.05) * s;
+  geo.scale(s, s, s);
+  const lo = new THREE.Vector3(Infinity, Infinity, Infinity), hi = lo.clone().negate(), v = new THREE.Vector3();
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    if (v.y < cut) continue;
+    lo.min(v); hi.max(v);
+  }
+  return geo.translate(-(lo.x + hi.x) / 2, -(lo.y + hi.y) / 2, -(lo.z + hi.z) / 2);
+}
+
+// Copy of a texture with its saturated red paint swapped for `hex`, keeping the
+// paint's light and dark (and blending the JPEG's soft edges).
+function repaintRed(tex, hex) {
+  const img = tex.image;
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const data = g.getImageData(0, 0, c.width, c.height);
+  const p = data.data;
+  const to = {};
+  new THREE.Color(hex).getRGB(to, THREE.SRGBColorSpace);
+  for (let i = 0; i < p.length; i += 4) {
+    const r = p[i], m = Math.max(p[i + 1], p[i + 2]);
+    const k = THREE.MathUtils.smoothstep(r ? (r - m) / r : 0, 0.3, 0.6);
+    if (!k) continue;
+    const l = Math.min(r / 225, 1.1); // the model's red is ~225 at full light
+    p[i] += (to.r * 255 * l - r) * k;
+    p[i + 1] += (to.g * 255 * l - p[i + 1]) * k;
+    p[i + 2] += (to.b * 255 * l - p[i + 2]) * k;
+  }
+  g.putImageData(data, 0, 0);
+  const out = new THREE.CanvasTexture(c);
+  for (const key of ['flipY', 'colorSpace', 'wrapS', 'wrapT', 'magFilter', 'minFilter', 'anisotropy']) out[key] = tex[key];
+  return out;
+}
+
+// Round badge with the lift's number, floating above each of its stations.
+function liftBadge(liftName, paint) {
+  const no = liftName.match(/(\d+)号/)?.[1];
+  if (!no) return null;
+  const fill = { red: '#d9604c', yellow: '#f0c24a', gray: '#aeb5b8', chair: '#4f6f7a' }[paint];
+  const ink = paint === 'red' || paint === 'chair' ? '#fbfaf5' : '#23303a';
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.beginPath();
+  g.arc(128, 128, 116, 0, Math.PI * 2);
+  g.fillStyle = fill;
+  g.fill();
+  g.lineWidth = 14;
+  g.strokeStyle = '#23303a';
+  g.stroke();
+  g.fillStyle = ink;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.font = '700 168px "Patrick Hand SC", sans-serif';
+  g.fillText(no, 128, 140);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  // alphaTest: the clear corners mustn't write depth, or the ink pass outlines the square.
+  return new THREE.SpriteMaterial({ map: tex, alphaTest: 0.5 });
+}
+
+// Number badge: size, height above the fallback station, and offset toward the
+// line's end of the station (so lines sharing a station don't stack badges).
+const BADGE = 6, BADGE_Y = 14, BADGE_Z = 5;
+// How far a station is pulled back along its own line when the map data has two
+// lines meeting end to end (No. 1's top is No. 7's bottom): they're separate
+// stations on the mountain, back to back with a gap between.
+const STATION_PULL = 20;
+
 // `scale` sizes towers, cable height and cars; `stationScale` the buildings;
 // `spacing` multiplies the gap between cars; `speed` is the haul rope in m/s.
 // Besides the meshes it returns `lines` (each lift's cable from points[0] to the
@@ -40,6 +173,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
   const belts = [];
   const lines = [];
   const footprints = [];
+  const stations = [], badges = [];
   const towerGeo = mergeGeometries([
     new THREE.CylinderGeometry(0.35, 0.5, 1, 6).translate(0, 0.5, 0),
   ]);
@@ -47,6 +181,18 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
   // Towers, arms and cars are instanced: there are hundreds of each.
   const towerMats = [], armMats = [];
   const _o = new THREE.Object3D();
+  const endKey = (p) => `${p[0]},${p[1]}`;
+  const ends = new Map();
+  for (const l of lifts) {
+    if (l.type === 'magic_carpet') continue;
+    for (const p of [l.points[0], l.points[l.points.length - 1]]) ends.set(endKey(p), (ends.get(endKey(p)) || 0) + 1);
+  }
+  const ownEnd = (p, toward) => {
+    if (ends.get(endKey(p)) < 2) return p;
+    const dx = toward[0] - p[0], dz = toward[1] - p[1], L = Math.hypot(dx, dz);
+    const d = STATION_PULL * stationScale;
+    return [p[0] + (dx / L) * d, p[1] + (dz / L) * d];
+  };
   const place = (list, x, y, z, ry, sx, sy = sx) => {
     _o.position.set(x, y, z);
     _o.rotation.set(0, ry, 0);
@@ -62,7 +208,8 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       belts.push(belt);
       continue;
     }
-    const a = lift.points[0], b = lift.points[lift.points.length - 1];
+    const pts0 = lift.points, last = pts0.length - 1;
+    const a = ownEnd(pts0[0], pts0[1]), b = ownEnd(pts0[last], pts0[last - 1]);
     const A = new THREE.Vector3(a[0], hf.heightAt(a[0], a[1]), a[1]);
     const B = new THREE.Vector3(b[0], hf.heightAt(b[0], b[1]), b[1]);
     const dir = new THREE.Vector3(B.x - A.x, 0, B.z - A.z);
@@ -72,13 +219,24 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     const yaw = Math.atan2(dir.x, dir.z);
     const isGondola = lift.type === 'gondola';
     const cableH = (isGondola ? 13 : 9) * scale;
+    const paint = isGondola ? cabinPaint(lift.name) : 'chair';
+    const badge = lift.name && liftBadge(lift.name, paint);
 
     for (const [P, flip] of [[A, 0], [B, Math.PI]]) {
-      const st = station(14, 18, 7);
+      const st = new THREE.Group();
+      st.add(station(14, 18, 7));
       st.scale.setScalar(stationScale);
       st.position.copy(P);
       st.rotation.y = yaw + flip;
       group.add(st);
+      stations.push(st);
+      if (badge) {
+        const sign = new THREE.Sprite(badge);
+        sign.scale.setScalar(BADGE);
+        sign.position.set(0, BADGE_Y, BADGE_Z);
+        st.add(sign);
+        badges.push(sign);
+      }
       footprints.push({ x: P.x, z: P.z, yaw, hw: 7 * stationScale, hd: 9 * stationScale });
     }
 
@@ -113,7 +271,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     const n = Math.floor(laneLen[0][laneLen[0].length - 1] / spacing);
     for (let laneIdx = 0; laneIdx < 2; laneIdx++) {
       for (let i = 0; i < n; i++) {
-        const kind = isGondola ? (i % 4 === 0 ? 'red' : 'cabin') : 'chair';
+        const kind = paint;
         movers.push({ kind, lane: lanes[laneIdx], acc: laneLen[laneIdx], s: i * spacing, up: laneIdx === 0, yaw });
       }
     }
@@ -132,13 +290,29 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     list.forEach((m, i) => im.setMatrixAt(i, m));
   }
   const fleets = {};
-  for (const kind of ['cabin', 'red', 'chair']) {
+  for (const kind of ['red', 'yellow', 'gray', 'chair']) {
     const mine = movers.filter((m) => m.kind === kind);
     if (!mine.length) continue;
     const im = instanced(carGeometry(kind), carMat, mine.length);
     mine.forEach((m, i) => { m.mesh = im; m.index = i; });
     fleets[kind] = im;
   }
+
+  // Swap in the Tripo models once they arrive.
+  loadLiftModels().then((md) => {
+    for (const [kind, im] of Object.entries(fleets)) {
+      im.geometry = kind === 'chair' ? md.chair : md.cabin;
+      im.material = kind === 'chair' ? md.chairMat : md.cabinMats[kind];
+    }
+    for (const st of stations) {
+      const m = new THREE.Mesh(md.station, md.stationMat);
+      m.castShadow = m.receiveShadow = true;
+      st.children[0].removeFromParent();
+      st.add(m);
+    }
+    for (const b of badges) b.position.y = md.stationHeight + BADGE * 0.75;
+    for (const f of footprints) f.hw = md.stationHalfWidth * stationScale;
+  }).catch((err) => console.warn('Lift models failed to load; keeping the box stand-ins.', err));
 
   const tmp = new THREE.Vector3();
   return {
@@ -232,7 +406,7 @@ function carGeometry(kind) {
       ]
     : [
         part(new THREE.BoxGeometry(0.12, 2.2, 0.12), mats.dark.color, 0, -1.1, 0),
-        part(new THREE.BoxGeometry(1.9, 2.0, 2.2), (kind === 'red' ? mats.cabinRed : mats.cabin).color, 0, -3.1, 0),
+        part(new THREE.BoxGeometry(1.9, 2.0, 2.2), { red: mats.cabinRed, yellow: mats.cabin, gray: mats.cabinGray }[kind].color, 0, -3.1, 0),
         part(new THREE.BoxGeometry(1.95, 0.8, 1.7), mats.glass.color, 0, -2.7, 0),
         part(new THREE.BoxGeometry(1.7, 0.25, 2.0), mats.dark.color, 0, -2.0, 0),
       ];
@@ -241,11 +415,21 @@ function carGeometry(kind) {
   return g;
 }
 
-// A single cabin, e.g. the one the player rides in.
-export function gondolaCabin(red) {
-  const m = new THREE.Mesh(carGeometry(red ? 'red' : 'cabin'), carMat);
+// A single cabin, e.g. the one the player rides in. `setLine(name)` paints it
+// for that gondola line.
+export function gondolaCabin() {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(carGeometry('red'), carMat);
   m.castShadow = true;
-  return m;
+  g.add(m);
+  let paint = 'red', models = null;
+  const apply = () => {
+    if (models) { m.geometry = models.cabin; m.material = models.cabinMats[paint]; }
+    else m.geometry = carGeometry(paint);
+  };
+  loadLiftModels().then((md) => { models = md; apply(); }).catch(() => {});
+  g.setLine = (name) => { paint = cabinPaint(name); apply(); };
+  return g;
 }
 
 // Bamboo-style marker poles every ~35 m down both edges of each run.

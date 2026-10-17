@@ -112,7 +112,7 @@ const boardSpots = [
   ...SERVICE_CENTRES.map((c) => ({ ride: rides.find((r) => r.label === c.lift), x: c.x, z: c.z, r: 150, hall: c })),
   ...rides.map((ride) => ({ ride, x: ride.bottom.x, z: ride.bottom.z, r: 60 })),
 ].filter((s) => s.ride);
-const cabin = gondolaCabin(true);
+const cabin = gondolaCabin();
 cabin.visible = false;
 scene.add(cabin);
 
@@ -394,6 +394,7 @@ function board(ride) {
   liftRide = { ride, t: 0, dur: THREE.MathUtils.clamp(ride.length / 110, 10, 22) };
   rider.root.visible = false;
   cabin.visible = true;
+  cabin.setLine(ride.label);
   cabin.rotation.set(0, Math.atan2(ride.dir.x, ride.dir.z), 0);
   phys.vel.set(0, 0, 0);
   trail.gap(phys.pos);
