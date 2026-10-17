@@ -137,18 +137,75 @@ const setSpin = (v) => {
   controls.autoRotate = v;
 };
 spinBtn.addEventListener('click', () => setSpin(!spin));
-controls.addEventListener('start', () => {
+const pauseSpin = () => {
   controls.autoRotate = false;
   clearTimeout(idleTimer);
-});
-controls.addEventListener('end', () => {
+};
+const resumeSpinLater = () => {
   clearTimeout(idleTimer);
   idleTimer = setTimeout(() => (controls.autoRotate = spin), 6000);
-});
+};
+controls.addEventListener('start', pauseSpin);
+controls.addEventListener('end', resumeSpinLater);
 document.getElementById('home').addEventListener('click', () => {
   flyTo = { t: 0, from: camera.position.clone(), fromT: controls.target.clone() };
 });
 let flyTo = null;
+
+// ---------- WASD fly ----------
+// Moves the camera and its orbit pivot together, so drag-to-spin still turns
+// around whatever is in front of you. W/S along the view, A/D sideways,
+// E/Q up/down, Shift faster. Speed scales with zoom.
+const FLY_KEYS = { KeyW: [0, 0, 1], KeyS: [0, 0, -1], KeyA: [-1, 0, 0], KeyD: [1, 0, 0], KeyE: [0, 1, 0], KeyQ: [0, -1, 0] };
+const held = new Set();
+let boost = false;
+const flyVel = new THREE.Vector3(), flyWant = new THREE.Vector3();
+const fwd = new THREE.Vector3(), side = new THREE.Vector3(), was = new THREE.Vector3();
+window.addEventListener('keydown', (e) => {
+  boost = e.shiftKey;
+  if (!FLY_KEYS[e.code] || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest?.('input, textarea, select')) return;
+  e.preventDefault();
+  held.add(e.code);
+  flyTo = null;
+  pauseSpin();
+});
+window.addEventListener('keyup', (e) => {
+  boost = e.shiftKey;
+  if (held.delete(e.code) && !held.size) resumeSpinLater();
+});
+window.addEventListener('blur', () => held.clear());
+
+function fly(dt) {
+  flyWant.set(0, 0, 0);
+  camera.getWorldDirection(fwd);
+  side.crossVectors(fwd, camera.up).normalize();
+  for (const code of held) {
+    const [x, y, z] = FLY_KEYS[code];
+    flyWant.addScaledVector(side, x).addScaledVector(camera.up, y).addScaledVector(fwd, z);
+  }
+  if (flyWant.lengthSq() > 0) {
+    const speed = camera.position.distanceTo(controls.target) * (boost ? 0.8 : 0.25);
+    flyWant.normalize().multiplyScalar(speed);
+  }
+  flyVel.lerp(flyWant, 1 - Math.exp(-dt * 8));
+  if (!held.size && flyVel.lengthSq() < 1) return flyVel.set(0, 0, 0);
+
+  // Move the pivot, keep it over the table, then move the camera by however
+  // far the pivot actually went, so the view stops at the table's edges.
+  const t = controls.target;
+  was.copy(t);
+  t.addScaledVector(flyVel, dt);
+  t.x = THREE.MathUtils.clamp(t.x, -hf.half, hf.half);
+  t.z = THREE.MathUtils.clamp(t.z, -hf.half, hf.half);
+  t.y = THREE.MathUtils.clamp(t.y, baseY, top);
+  camera.position.add(was.subVectors(t, was));
+  // Don't sink into the mountain.
+  const p = camera.position;
+  const floor = (hf.inside(p.x, p.z) ? hf.heightAt(p.x, p.z) : baseY) + 80;
+  if (p.y < floor) p.y = floor;
+  needsPick = true;
+}
 
 // ---------- Hover ----------
 const tip = document.getElementById('tip');
@@ -245,6 +302,7 @@ function frame() {
     controls.target.lerpVectors(flyTo.fromT, home, k);
     if (flyTo.t >= 1) flyTo = null;
   }
+  fly(dt);
   controls.update(dt);
   // Keep the pivot over the table.
   const t = controls.target;
