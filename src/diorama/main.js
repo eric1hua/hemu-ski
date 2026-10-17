@@ -91,19 +91,22 @@ document.getElementById('stats').textContent =
   `${runMap.groups.filter((g) => g.name).length} named runs · ${meta.lifts.length} lifts · ${RIDERS} riders`;
 
 // ---------- Camera ----------
+const MIN_ZOOM = 900;
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.rotateSpeed = 0.6;
 controls.zoomToCursor = true;
 controls.screenSpacePanning = false;
-controls.minDistance = 900;
+controls.minDistance = MIN_ZOOM;
 controls.maxDistance = 24000;
 controls.minPolarAngle = 0.12;
 controls.maxPolarAngle = 1.42;
 controls.autoRotateSpeed = 0.35;
 const home = new THREE.Vector3(0, (top + baseY) / 2 + 150, 250);
 controls.target.copy(home);
+// The orbit pivot is kept inside the block.
+const pivotBox = new THREE.Box3(new THREE.Vector3(-hf.half, baseY, -hf.half), new THREE.Vector3(hf.half, top, hf.half));
 
 function fitDistance() {
   const vf = THREE.MathUtils.degToRad(camera.fov);
@@ -143,7 +146,8 @@ const pauseSpin = () => {
 };
 const resumeSpinLater = () => {
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => (controls.autoRotate = spin), 6000);
+  // Not while flying: a drag or scroll mid-flight ends with this too.
+  idleTimer = setTimeout(() => (controls.autoRotate = spin && !held.size), 6000);
 };
 controls.addEventListener('start', pauseSpin);
 controls.addEventListener('end', resumeSpinLater);
@@ -153,14 +157,28 @@ document.getElementById('home').addEventListener('click', () => {
 let flyTo = null;
 
 // ---------- WASD fly ----------
-// Moves the camera and its orbit pivot together, so drag-to-spin still turns
-// around whatever is in front of you. W/S along the view, A/D sideways,
-// E/Q up/down, Shift faster. Speed scales with zoom.
+// Flies the camera itself, so W always goes where it's facing; only the
+// mountain (it skims over it) and the table's edges stop it. W/S along the
+// view, A/D sideways, E/Q up/down, Shift faster. Speed scales with how far
+// away the middle of the view is.
 const FLY_KEYS = { KeyW: [0, 0, 1], KeyS: [0, 0, -1], KeyA: [-1, 0, 0], KeyD: [1, 0, 0], KeyE: [0, 1, 0], KeyQ: [0, -1, 0] };
 const held = new Set();
 let boost = false;
 const flyVel = new THREE.Vector3(), flyWant = new THREE.Vector3();
 const fwd = new THREE.Vector3(), side = new THREE.Vector3(), was = new THREE.Vector3();
+const sight = new THREE.Ray();
+const MIN_PIVOT = camera.near * 2;
+// How far along a ray it's inside the block, as [from, to], or null.
+function blockSpan(ray) {
+  let from = 0, to = Infinity;
+  for (const k of ['x', 'y', 'z']) {
+    const a = (pivotBox.min[k] - ray.origin[k]) / ray.direction[k];
+    const b = (pivotBox.max[k] - ray.origin[k]) / ray.direction[k];
+    from = Math.max(from, Math.min(a, b));
+    to = Math.min(to, Math.max(a, b));
+  }
+  return from <= to ? [from, to] : null;
+}
 window.addEventListener('keydown', (e) => {
   boost = e.shiftKey;
   if (!FLY_KEYS[e.code] || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -172,11 +190,19 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => {
   boost = e.shiftKey;
-  if (held.delete(e.code) && !held.size) resumeSpinLater();
+  const had = held.size;
+  // macOS drops other keys' keyups while Cmd is down, so letting go of Cmd
+  // lets go of everything; otherwise a W released mid-shortcut flies on alone.
+  if (e.key === 'Meta') held.clear();
+  else held.delete(e.code);
+  if (had && !held.size) resumeSpinLater();
 });
-window.addEventListener('blur', () => held.clear());
+const letGo = () => { held.clear(); boost = false; };
+window.addEventListener('blur', letGo);
+document.addEventListener('visibilitychange', letGo);
 
 function fly(dt) {
+  const p = camera.position, t = controls.target;
   flyWant.set(0, 0, 0);
   camera.getWorldDirection(fwd);
   side.crossVectors(fwd, camera.up).normalize();
@@ -185,25 +211,37 @@ function fly(dt) {
     flyWant.addScaledVector(side, x).addScaledVector(camera.up, y).addScaledVector(fwd, z);
   }
   if (flyWant.lengthSq() > 0) {
-    const speed = camera.position.distanceTo(controls.target) * (boost ? 0.8 : 0.25);
+    const speed = Math.max(p.distanceTo(t), MIN_ZOOM) * (boost ? 0.8 : 0.25);
     flyWant.normalize().multiplyScalar(speed);
   }
   flyVel.lerp(flyWant, 1 - Math.exp(-dt * 8));
   if (!held.size && flyVel.lengthSq() < 1) return flyVel.set(0, 0, 0);
 
-  // Move the pivot, keep it over the table, then move the camera by however
-  // far the pivot actually went, so the view stops at the table's edges.
-  const t = controls.target;
-  was.copy(t);
-  t.addScaledVector(flyVel, dt);
-  t.x = THREE.MathUtils.clamp(t.x, -hf.half, hf.half);
-  t.z = THREE.MathUtils.clamp(t.z, -hf.half, hf.half);
-  t.y = THREE.MathUtils.clamp(t.y, baseY, top);
-  camera.position.add(was.subVectors(t, was));
-  // Don't sink into the mountain.
-  const p = camera.position;
+  // Move the camera, keeping it above the mountain, and carry the pivot by
+  // exactly as much, so OrbitControls neither turns nor zooms the view.
+  was.copy(p);
+  p.addScaledVector(flyVel, dt);
   const floor = (hf.inside(p.x, p.z) ? hf.heightAt(p.x, p.z) : baseY) + 80;
   if (p.y < floor) p.y = floor;
+  t.add(was.subVectors(p, was));
+  // Then slide the pivot along the line of sight onto the ground in the middle
+  // of the view, so drag-to-spin turns around what's in front of you. With no
+  // ground there, it keeps its distance but stays inside the block; only once
+  // the camera itself reaches the block's edge does it stop.
+  sight.set(p, fwd);
+  const hit = runMap.pickGround(sight, pivotBox);
+  const span = blockSpan(sight);
+  if (hit && hit.distanceTo(p) > MIN_PIVOT) {
+    t.copy(hit);
+  } else if (span && span[1] > MIN_PIVOT) {
+    sight.at(THREE.MathUtils.clamp(p.distanceTo(t), Math.max(span[0], MIN_PIVOT), span[1]), t);
+  } else {
+    was.copy(t);
+    pivotBox.clampPoint(t, t);
+    p.add(was.subVectors(t, was));
+  }
+  // Flying can get closer than the zoom limit; don't let OrbitControls push back.
+  controls.minDistance = Math.min(MIN_ZOOM, p.distanceTo(t));
   needsPick = true;
 }
 
@@ -306,9 +344,9 @@ function frame() {
   controls.update(dt);
   // Keep the pivot over the table.
   const t = controls.target;
-  t.x = THREE.MathUtils.clamp(t.x, -hf.half, hf.half);
-  t.z = THREE.MathUtils.clamp(t.z, -hf.half, hf.half);
-  t.y = THREE.MathUtils.clamp(t.y, baseY, top);
+  pivotBox.clampPoint(t, t);
+  // Zooming back out restores the zoom limit a flight may have lowered.
+  controls.minDistance = Math.min(MIN_ZOOM, camera.position.distanceTo(t));
 
   runMap.setLineOpacity(THREE.MathUtils.clamp((camera.position.distanceTo(t) - 1500) / 5000, 0.18, 0.9));
   lifts.update(dt);

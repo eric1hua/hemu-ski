@@ -126,7 +126,10 @@ export class RunMap {
   // Heightfield ray march; returns the hit point or null.
   pickGround(ray, bounds) {
     const box = bounds, p = new THREE.Vector3();
-    if (!ray.intersectBox(box, p)) return null;
+    // From where the ray enters the box, or from its origin if it starts inside
+    // (intersectBox would give the exit point then).
+    if (box.containsPoint(ray.origin)) p.copy(ray.origin);
+    else if (!ray.intersectBox(box, p)) return null;
     const hf = this.hf, d = ray.direction;
     let t = 0, prev = 0;
     const o = p.clone();
