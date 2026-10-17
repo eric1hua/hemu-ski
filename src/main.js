@@ -117,7 +117,8 @@ cabin.visible = false;
 scene.add(cabin);
 
 // ---------- Player ----------
-const rider = new Rider();
+// ?rider=classic keeps the primitive rider instead of the Tripo model.
+const rider = new Rider({ model: new URLSearchParams(location.search).get('rider') !== 'classic' });
 scene.add(rider.root);
 const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)] });
 const trail = new Trail();

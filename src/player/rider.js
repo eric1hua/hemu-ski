@@ -120,7 +120,9 @@ function boardGeometry() {
 }
 
 export class Rider {
-  constructor() {
+  // `model: true` swaps the primitive body for the rigged Tripo character once
+  // public/models/player.glb has loaded; the primitive one stays as the fallback.
+  constructor({ model = false } = {}) {
     this.root = new THREE.Group(); // at board, oriented to slope; -z = travel
     this.edge = new THREE.Group(); // rolls onto toe/heel edge
     this.root.add(this.edge);
@@ -135,10 +137,27 @@ export class Rider {
     this.body = new THREE.Group();
     this.body.rotation.y = Math.PI / 2;
     this.edge.add(this.body);
+    this.classic = new THREE.Group(); // the primitive character, minus the bindings
+    this.body.add(this.classic);
+    this.boots = []; // primitive boots and straps, hidden when the model boots stand in them
     this.#buildCharacter();
 
     this.pose = { crouch: 0.4, lean: 0, twist: 0, armSwing: 0, air: 0, tumble: 0 };
     this.t = 0;
+    this.model = null;
+    if (model) {
+      // Loaded on demand so pages with only classic riders (the diorama) skip the loader code.
+      import('./rider-model.js')
+        .then(async ({ loadRiderModel, RiderModel }) => this.#useModel(new RiderModel(await loadRiderModel())))
+        .catch((err) => console.warn('Rider model unavailable; keeping the classic rider.', err));
+    }
+  }
+
+  #useModel(model) {
+    this.model = model;
+    this.body.add(this.model.root);
+    this.classic.visible = false;
+    for (const m of this.boots) m.visible = false;
   }
 
   #buildCharacter() {
@@ -149,22 +168,25 @@ export class Rider {
       const foot = new THREE.Group();
       foot.position.set(x, 0.025, 0);
       b.add(foot);
-      mesh(new THREE.BoxGeometry(0.17, 0.16, 0.33), M.black, foot, 0, 0.09, 0.02); // boot
+      this.boots.push(
+        mesh(new THREE.BoxGeometry(0.17, 0.16, 0.33), M.black, foot, 0, 0.09, 0.02), // boot
+        mesh(new THREE.BoxGeometry(0.19, 0.05, 0.12), M.orange, foot, 0, 0.15, 0.05), // ankle strap
+        mesh(new THREE.BoxGeometry(0.19, 0.04, 0.07), M.orange, foot, 0, 0.12, 0.15), // toe strap
+      );
       mesh(new THREE.BoxGeometry(0.18, 0.035, 0.35), M.orange, foot, 0, 0.015, 0.02); // sole
-      mesh(new THREE.BoxGeometry(0.19, 0.05, 0.12), M.orange, foot, 0, 0.15, 0.05); // ankle strap
-      mesh(new THREE.BoxGeometry(0.19, 0.04, 0.07), M.orange, foot, 0, 0.12, 0.15); // toe strap
       mesh(new THREE.BoxGeometry(0.18, 0.26, 0.05), M.orange, foot, 0, 0.17, -0.16); // highback
       return foot;
     });
 
     // Baggy pants: navy with the cream upper panel and white zip piping.
-    this.thighs = [1, -1].map((side) => new Limb(b, 0.135, 0.15, M.navy, { top: { len: 0.55, mat: M.cream }, pipe: { side, mat: M.piping } }));
-    this.shins = [1, -1].map((side) => new Limb(b, 0.135, 0.14, M.navy, { pipe: { side, mat: M.piping } }));
-    this.cuffs = [0, 1].map(() => mesh(new THREE.CylinderGeometry(0.145, 0.14, 0.08, 9), M.black, b));
-    this.knees = [0, 1].map(() => mesh(new THREE.SphereGeometry(0.14, 9, 7), M.navy, b));
+    const c = this.classic;
+    this.thighs = [1, -1].map((side) => new Limb(c, 0.135, 0.15, M.navy, { top: { len: 0.55, mat: M.cream }, pipe: { side, mat: M.piping } }));
+    this.shins = [1, -1].map((side) => new Limb(c, 0.135, 0.14, M.navy, { pipe: { side, mat: M.piping } }));
+    this.cuffs = [0, 1].map(() => mesh(new THREE.CylinderGeometry(0.145, 0.14, 0.08, 9), M.black, c));
+    this.knees = [0, 1].map(() => mesh(new THREE.SphereGeometry(0.14, 9, 7), M.navy, c));
 
     this.hips = new THREE.Group();
-    b.add(this.hips);
+    c.add(this.hips);
     mesh(new THREE.SphereGeometry(0.2, 10, 8).scale(1.25, 0.75, 0.95), M.navy, this.hips);
     mesh(new THREE.SphereGeometry(0.205, 12, 8, Math.PI / 2 - 1.2, 2.4, 0.5, 1.6).scale(1.25, 0.75, 0.95), M.cream, this.hips); // front panel
 
@@ -322,5 +344,7 @@ export class Rider {
 
     // Crash tumble.
     this.body.rotation.x = p.tumble;
+
+    this.model?.apply(this);
   }
 }
