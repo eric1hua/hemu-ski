@@ -1,9 +1,20 @@
 // Procedural sound: wind that rises with speed, and a scrape for edge/skid.
+// Effects and music play through their own buses, switched from the menu.
 export class Sound {
-  constructor() { this.ctx = null; }
+  constructor() {
+    this.ctx = null;
+    this.sfxOn = true;
+    this.musicOn = true;
+  }
   start() {
     if (this.ctx) return;
     const ctx = (this.ctx = new AudioContext());
+    this.sfx = ctx.createGain();
+    this.sfx.gain.value = this.sfxOn ? 1 : 0;
+    this.sfx.connect(ctx.destination);
+    this.music = ctx.createGain(); // nothing plays on it yet
+    this.music.gain.value = this.musicOn ? 1 : 0;
+    this.music.connect(ctx.destination);
     const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -19,14 +30,22 @@ export class Sound {
     this.windF.Q.value = 0.7;
     this.windG = ctx.createGain();
     this.windG.gain.value = 0;
-    noise().connect(this.windF).connect(this.windG).connect(ctx.destination);
+    noise().connect(this.windF).connect(this.windG).connect(this.sfx);
 
     this.scrapeF = ctx.createBiquadFilter();
     this.scrapeF.type = 'highpass';
     this.scrapeF.frequency.value = 1800;
     this.scrapeG = ctx.createGain();
     this.scrapeG.gain.value = 0;
-    noise().connect(this.scrapeF).connect(this.scrapeG).connect(ctx.destination);
+    noise().connect(this.scrapeF).connect(this.scrapeG).connect(this.sfx);
+  }
+  setSfx(on) {
+    this.sfxOn = on;
+    if (this.ctx) this.sfx.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.05);
+  }
+  setMusic(on) {
+    this.musicOn = on;
+    if (this.ctx) this.music.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.05);
   }
   update(speed, slip, grounded) {
     if (!this.ctx) return;

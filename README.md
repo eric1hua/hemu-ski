@@ -25,6 +25,11 @@ the sky as a small island behind block letters. **Begin** (or Enter) flies the
 camera down through a cloud to the top station; Space skips the flight, and
 `?notitle` in the URL skips the title altogether.
 
+A menu rail on the left edge links to the diorama and switches music and sound
+effects on and off; the game remembers those settings between visits. Its
+**Outfit & gear** and **Settings** panels are placeholders for now, and nothing
+plays on the music bus yet.
+
 Or double-click `scripts/Hemu Ski.command` (a symlink to it on the Desktop works
 too). It starts the server on port 5190 and opens the game. Close the Terminal
 window to stop the server.

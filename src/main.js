@@ -11,6 +11,7 @@ import { BoardPhysics } from './player/physics.js';
 import { Trail, Spray } from './player/fx.js';
 import { Hud } from './hud.js';
 import { Sound } from './audio.js';
+import { createMenu } from './menu.js';
 import { createIsland, createTitleLetters, createSnowSpecks, createCloudWipe } from './intro.js';
 
 const MAIN_RUN = '云霄峰道'; // Yunxiaofeng — the run under Gondola No. 6
@@ -127,6 +128,7 @@ const spray = new Spray();
 scene.add(trail.mesh, spray.points);
 const hud = new Hud(world, piste);
 const sound = new Sound();
+createMenu(sound);
 
 const keys = new Set();
 window.addEventListener('keydown', (e) => {

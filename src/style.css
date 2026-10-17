@@ -57,7 +57,7 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
   box-shadow: 6px 6px 0 rgba(35, 48, 58, 0.35);
   padding: 30px 26px 22px; font-size: 21px; line-height: 1.35;
 }
-.panel .tab {
+.panel .tab, #menu .tab {
   position: absolute; top: -22px; left: -14px; padding: 4px 18px;
   background: var(--tab); color: #fff; border: 2.5px solid var(--ink);
   font-family: 'Patrick Hand SC', cursive; font-size: 22px; letter-spacing: 1px;
@@ -128,6 +128,75 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 #prompt kbd {
   font-family: 'Patrick Hand SC', cursive; border: 2px solid var(--ink); border-radius: 5px;
   padding: 0 7px; margin: 0 3px; background: #fff;
+}
+
+/* Sidebar menu: an icon rail on the left edge, with paper panels that open
+   beside it. Centred on the gap between the run tag and the stats, which sits
+   15px above the middle of the screen. */
+#menu {
+  position: fixed; left: 18px; top: calc(50% - 15px); transform: translateY(-50%);
+  display: flex; align-items: center; gap: 24px; pointer-events: none;
+}
+#menu .rail {
+  pointer-events: auto; display: flex; flex-direction: column; gap: 7px; padding: 7px;
+  background: var(--paper); border: 2.5px solid var(--ink);
+  box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35);
+}
+#menu hr { width: 100%; margin: 1px 0; border: 0; border-top: 2px dashed rgba(35, 48, 58, 0.35); }
+.mi {
+  position: relative; display: grid; place-items: center; width: 42px; height: 42px; padding: 0;
+  color: var(--ink); background: #fff; border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer; transition: transform 0.12s;
+}
+.mi svg {
+  width: 26px; height: 26px; overflow: visible;
+  fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.mi:hover { transform: translateY(-2px); }
+.mi:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+.mi:focus-visible { outline: 3px solid var(--tab); outline-offset: 3px; }
+.mi.go { background: var(--tab); }
+.mi[aria-pressed='true'], .mi[aria-expanded='true'] { background: var(--accent); }
+/* Toggles: the icon dims and gets struck through when off. */
+.mi[aria-pressed='true'] .off, .mi[aria-pressed='false'] .on { display: none; }
+.mi[aria-pressed='false'] .base { opacity: 0.4; }
+.mi .halo { stroke: #fff; stroke-width: 5.5; }
+/* Name chip, out to the right of the rail on hover. */
+.mi::after {
+  content: attr(data-tip); position: absolute; left: calc(100% + 20px); top: 50%;
+  transform: translate(-6px, -50%); opacity: 0; pointer-events: none; transition: opacity 0.15s, transform 0.15s;
+  font-family: 'Patrick Hand SC', cursive; font-size: 18px; letter-spacing: 1px; white-space: nowrap;
+  background: var(--paper); border: 2.5px solid var(--ink); padding: 0 10px 2px;
+  box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
+.mi:hover::after, .mi:focus-visible::after { opacity: 1; transform: translate(0, -50%); }
+#menu.open .mi::after { display: none; }
+
+#menu .flyout {
+  pointer-events: auto; position: relative; width: min(290px, calc(100vw - 124px));
+  background: var(--paper); border: 2.5px solid var(--ink); box-shadow: 6px 6px 0 rgba(35, 48, 58, 0.35);
+  padding: 30px 18px 16px; font-size: 19px; line-height: 1.3;
+}
+#menu .flyout p { margin: 0 0 12px; }
+#menu .slots {
+  list-style: none; margin: 0 0 14px; padding: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+#menu .slots li {
+  aspect-ratio: 1; display: grid; place-items: end center; padding-bottom: 3px;
+  border: 2px dashed rgba(35, 48, 58, 0.4); font-size: 15px; color: rgba(35, 48, 58, 0.6);
+}
+/* Rubber stamp on the panels still to come. */
+#menu .soon {
+  display: inline-block; margin: 0; padding: 0 10px 2px; transform: rotate(-4deg);
+  font-family: 'Patrick Hand SC', cursive; font-size: 18px; letter-spacing: 2px;
+  color: #d9534a; border: 2.5px solid currentColor;
+}
+
+@media (max-height: 520px) {
+  #menu .rail { gap: 4px; padding: 5px; }
+  .mi { width: 30px; height: 30px; }
+  .mi svg { width: 20px; height: 20px; }
 }
 
 @media (max-width: 640px) {
