@@ -166,7 +166,8 @@ const STATION_PULL = 20;
 // `scale` sizes towers, cable height and cars; `stationScale` the buildings;
 // `spacing` multiplies the gap between cars; `speed` is the haul rope in m/s.
 // Besides the meshes it returns `lines` (each lift's cable from points[0] to the
-// far end, for riding it) and `footprints` (station boxes, for collisions).
+// far end, for riding it, with the lift's OSM `id`) and `footprints` (station
+// boxes, for collisions).
 export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacing: gap = 1, speed = 5 } = {}) {
   const group = new THREE.Group();
   const movers = [];
@@ -264,7 +265,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       for (let i = 1; i < lane.length; i++) acc.push(acc[i - 1] + lane[i].distanceTo(lane[i - 1]));
       return acc;
     });
-    lines.push({ name: lift.name, type: lift.type, a: A, b: B, cable: lanes[0], acc: laneLen[0] });
+    lines.push({ id: lift.id, name: lift.name, type: lift.type, a: A, b: B, cable: lanes[0], acc: laneLen[0] });
 
     // Cabins / chairs riding the loop: up on one lane, down on the other.
     const spacing = (isGondola ? 55 : 25) * gap;

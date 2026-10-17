@@ -1,4 +1,5 @@
-// Trail-map lines painted on the snow, plus hover picking for runs and lifts.
+// Trail-map lines painted on the snow, plus picking and highlights for runs,
+// lifts and their stations.
 // Runs that share a name (OSM often splits one run into several ways) are
 // grouped, so hovering any piece highlights the whole run.
 import * as THREE from 'three';
@@ -41,6 +42,11 @@ function lineMat(color, opacity, order) {
   return makeToon({ color, transparent: opacity < 1, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 - order, polygonOffsetUnits: -4 - order * 2, side: THREE.DoubleSide }, { hatch: 0 });
 }
 
+// A closed loop of [x, z] points, for ribbon().
+function circle(x, z, r, n = 48) {
+  return Array.from({ length: n + 1 }, (_, i) => [x + Math.cos((i / n) * Math.PI * 2) * r, z + Math.sin((i / n) * Math.PI * 2) * r]);
+}
+
 function segDist(px, pz, a, b) {
   const dx = b[0] - a[0], dz = b[1] - a[1];
   let t = ((px - a[0]) * dx + (pz - a[1]) * dz) / (dx * dx + dz * dz || 1);
@@ -53,7 +59,8 @@ export class RunMap {
     this.hf = hf;
     this.group = new THREE.Group();
     this.hoverGroup = new THREE.Group();
-    this.group.add(this.hoverGroup);
+    this.pickGroup = new THREE.Group();
+    this.group.add(this.hoverGroup, this.pickGroup);
 
     // Group runs by name; unnamed ways stay on their own.
     const byKey = new Map();
@@ -110,6 +117,7 @@ export class RunMap {
     });
 
     this.hot = null;
+    this.picked = null;
     this.hiMats = {
       casing: lineMat('#f0c24a', 1, 1),
       line: Object.fromEntries(Object.entries(DIFFICULTY).map(([k, d]) => [k, lineMat(d.color, 1, 2)])),
@@ -181,32 +189,48 @@ export class RunMap {
     return best;
   }
 
-  setHot(item) {
-    if (item === this.hot) return;
-    this.hot = item;
-    for (const c of [...this.hoverGroup.children]) { c.geometry.dispose(); this.hoverGroup.remove(c); }
+  // Highlights: `hot` follows the pointer and `picked` is the selection.
+  // Items with a `ring` (lift stations, service centres) get one painted round
+  // them on the snow.
+  setHot(item) { this.#highlight('hot', item); }
+  setPicked(item) { this.#highlight('picked', item); }
+
+  #highlight(slot, item) {
+    if (item === this[slot]) return;
+    this[slot] = item;
+    const group = slot === 'hot' ? this.hoverGroup : this.pickGroup;
+    for (const c of [...group.children]) { c.geometry.dispose(); group.remove(c); }
     if (!item) return;
-    if (item.kind === 'run') {
-      for (const r of item.runs) {
-        const casing = new THREE.Mesh(ribbon(this.hf, r.points, 30, LINE_LIFT + 1), this.hiMats.casing);
-        const line = new THREE.Mesh(ribbon(this.hf, r.points, 13, LINE_LIFT + 2), this.hiMats.line[r.difficulty] || this.hiMats.line.intermediate);
-        casing.renderOrder = 2;
-        line.renderOrder = 3;
-        this.hoverGroup.add(casing, line);
-      }
-    } else {
-      // A painted dashed path under the lift line.
-      const l = item.lift;
-      const pts = [l.points[0], l.points[l.points.length - 1]];
-      const casing = new THREE.Mesh(ribbon(this.hf, pts, 22, LINE_LIFT + 1), this.hiMats.casing);
-      const line = new THREE.Mesh(ribbon(this.hf, pts, 11, LINE_LIFT + 2), this.hiMats.lift);
+    const paint = (points, casingHalf, lineHalf, mat) => {
+      const casing = new THREE.Mesh(ribbon(this.hf, points, casingHalf, LINE_LIFT + 1), this.hiMats.casing);
+      const line = new THREE.Mesh(ribbon(this.hf, points, lineHalf, LINE_LIFT + 2), mat);
       casing.renderOrder = 2;
       line.renderOrder = 3;
-      this.hoverGroup.add(casing, line);
+      group.add(casing, line);
+    };
+    if (item.kind === 'run') {
+      for (const r of item.runs) paint(r.points, 30, 13, this.hiMats.line[r.difficulty] || this.hiMats.line.intermediate);
+      return;
     }
+    // A painted dashed path under the lift line.
+    const l = item.kind === 'station' ? item.lift.lift : item.kind === 'lift' ? item.lift : null;
+    if (l) paint([l.points[0], l.points[l.points.length - 1]], 22, 11, this.hiMats.lift);
+    if (item.ring) paint(circle(item.x, item.z, item.ring), 12, 5, this.hiMats.lift);
   }
 
   describe(item) {
+    if (item.kind === 'station') {
+      const l = item.lift;
+      return {
+        badge: 'lift',
+        zh: `${l.zh} · ${item.end === 'bottom' ? '下站' : '上站'}`,
+        en: `${l.en} · ${item.end} station`,
+        rows: [
+          [`${Math.round(item.y).toLocaleString()} m`, ''],
+          [item.end === 'bottom' ? `up to ${Math.round(l.topY).toLocaleString()} m` : `from ${Math.round(l.bottomY).toLocaleString()} m`, ''],
+        ],
+      };
+    }
     if (item.kind === 'lift') {
       return {
         badge: 'lift',

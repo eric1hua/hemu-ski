@@ -25,7 +25,7 @@
         <li><span class="badge lodge"></span>Service centre</li>
       </ul>
       <p class="dim" id="stats"></p>
-      <p class="hint">Drag to spin · scroll to zoom · WASD to fly (Q/E down/up, Shift faster) · hover a run, lift or lodge</p>
+      <p class="hint">Drag to spin · scroll to zoom · WASD to fly (Q/E down/up, Shift faster) · click a run, lift, station or lodge to go there</p>
       <div class="btns">
         <button id="spin" aria-pressed="true">Auto-spin</button>
         <button id="home">Reset view</button>
@@ -38,6 +38,18 @@
       <div class="en"></div>
       <div class="rows"></div>
     </div>
+
+    <!-- The picked place, and where it can send you in the game. -->
+    <section id="pick" class="dio-pick hidden" aria-label="Selected place" aria-live="polite">
+      <div class="tab"></div>
+      <button type="button" class="x" aria-label="Close">×</button>
+      <div class="head"><span class="badge"></span><span class="zh"></span></div>
+      <div class="en"></div>
+      <div class="rows"></div>
+      <p class="what"></p>
+      <div class="acts"></div>
+    </section>
+    <div id="cloud"></div>
 
     <p class="dio-credit">Terrain: AWS Terrain Tiles · Runs &amp; lifts © OpenStreetMap contributors</p>
 

@@ -14,6 +14,9 @@ import { toonUniforms } from '../render/toon.js';
 import { createBase } from './base.js';
 import { Skiers } from './skiers.js';
 import { RunMap } from './runs.js';
+import { Nav } from './nav.js';
+import { createCloudWipe } from '../intro.js';
+import { noteArrival, takeArrivalNote } from '../destinations.js';
 
 const TREELINE = 2350;
 // Toy proportions: props are oversized so they read from across the table.
@@ -35,6 +38,9 @@ const scene = new THREE.Scene();
 scene.background = SKY.horizon;
 const camera = new THREE.PerspectiveCamera(30, 1, 20, 80000);
 
+// Coming back from the game, the loading screen says so.
+const arrivalNote = takeArrivalNote();
+if (arrivalNote) document.querySelector('#loading > :last-child').textContent = arrivalNote;
 const world = await loadWorld('diorama/');
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
 const { detail: hf, meta } = world;
@@ -70,7 +76,7 @@ const lodges = SERVICE_CENTRES.map((c) => {
   const at = { ...c, x: c.x - meta.center.x, z: c.z - meta.center.z, faceTo: [c.faceTo[0] - meta.center.x, c.faceTo[1] - meta.center.z] };
   const group = createServiceCentre(hf, at, { scale: LODGE_SCALE });
   scene.add(group);
-  return { kind: 'lodge', ...at, group, top: new THREE.Vector3(at.x, group.position.y + 20 * LODGE_SCALE, at.z) };
+  return { kind: 'lodge', ...at, group, ring: 64 * LODGE_SCALE, top: new THREE.Vector3(at.x, group.position.y + 20 * LODGE_SCALE, at.z) };
 });
 const forest = createForest(hf, piste, meta.lifts, {
   treeline: TREELINE, spacing: 34, scale: TREE_SCALE, chunk: 800, lodDistance: 2600, density: 0.45,
@@ -82,6 +88,15 @@ scene.add(lifts.group);
 const cableHeight = (l) => (l.type === 'magic_carpet' ? 3 : (l.type === 'gondola' ? 13 : 9) * LIFT_SCALE);
 const runMap = new RunMap(hf, meta.runs, meta.lifts, { lineHalf: 10, liftCable: cableHeight });
 scene.add(runMap.group);
+// Each lift's two stations, picked like the lodges.
+const stations = lifts.lines.flatMap((line) => {
+  const lift = runMap.lifts.find((l) => l.lift.id === line.id);
+  const up = line.a.y <= line.b.y;
+  return [[up ? line.a : line.b, 'bottom'], [up ? line.b : line.a, 'top']].map(([P, end]) => ({
+    kind: 'station', lift, end, x: P.x, y: P.y, z: P.z, ring: 13 * STATION_SCALE,
+    top: new THREE.Vector3(P.x, P.y + 6 * STATION_SCALE, P.z),
+  }));
+});
 const skiers = new Skiers(hf, meta.runs, { count: RIDERS, scale: RIDER_SCALE });
 scene.add(skiers.group);
 const sky = createSky();
@@ -147,14 +162,36 @@ const pauseSpin = () => {
 const resumeSpinLater = () => {
   clearTimeout(idleTimer);
   // Not while flying: a drag or scroll mid-flight ends with this too.
-  idleTimer = setTimeout(() => (controls.autoRotate = spin && !held.size), 6000);
+  // Nor while a place is picked: the card is about it.
+  idleTimer = setTimeout(() => (controls.autoRotate = spin && !held.size && !nav.selected), 6000);
 };
 controls.addEventListener('start', pauseSpin);
 controls.addEventListener('end', resumeSpinLater);
-document.getElementById('home').addEventListener('click', () => {
-  flyTo = { t: 0, from: camera.position.clone(), fromT: controls.target.clone() };
-});
+
+// Camera flights (Reset view, Look closer, the dive into the game), eased from
+// the current view to `to`, turning round `toT`. A WASD key takes over.
 let flyTo = null;
+const easeOut = (t) => 1 - (1 - t) ** 3;
+function flyCamera(to, toT, { dur = 1.4, ease = easeOut } = {}) {
+  flyTo = { t: 0, dur, ease, from: camera.position.clone(), fromT: controls.target.clone(), to, toT };
+}
+document.getElementById('home').addEventListener('click', () => {
+  flyCamera(home.clone().add(new THREE.Vector3(0.45, 0.52, 0.72).normalize().multiplyScalar(fitDistance())), home);
+});
+// A view of `point` from `dist` away, from the side the camera is on now,
+// looking down at it between `tilt[0]` and `tilt[1]` radians from overhead.
+const _sph = new THREE.Spherical();
+function viewOf(point, dist, tilt = [0.55, 1.1]) {
+  _sph.setFromVector3(camera.position.clone().sub(controls.target));
+  _sph.phi = THREE.MathUtils.clamp(_sph.phi, tilt[0], tilt[1]);
+  _sph.radius = dist;
+  return point.clone().add(new THREE.Vector3().setFromSpherical(_sph));
+}
+// How far back to stand to see `size` metres of the table.
+function frameDistance(size) {
+  const fit = (size * 1.4) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  return THREE.MathUtils.clamp(fit, MIN_ZOOM * 1.3, fitDistance());
+}
 
 // ---------- WASD fly ----------
 // Flies the camera itself, so W always goes where it's facing; only the
@@ -260,10 +297,12 @@ canvas.addEventListener('pointerleave', () => { pointerIn = false; needsPick = t
 canvas.addEventListener('pointerdown', (e) => { dragging = true; downAt = [e.clientX, e.clientY]; needsPick = true; });
 window.addEventListener('pointerup', (e) => {
   dragging = false;
-  // A tap (touch) picks at that spot.
+  // A click or tap (no drag) picks at that spot and selects what's there, or
+  // clears the selection on open ground.
   if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 6) {
     mouse.set(e.clientX, e.clientY);
     pointerIn = true;
+    if (e.button === 0 && !wipe) nav.select(pick());
   }
   downAt = null;
   needsPick = true;
@@ -272,8 +311,8 @@ window.addEventListener('pointerup', (e) => {
 function pick() {
   if (!pointerIn || dragging) return null;
   const w = window.innerWidth, h = window.innerHeight;
-  const lodge = nearestLodge(w, h);
-  if (lodge) return lodge;
+  const spot = nearestSpot(lodges, 55 * LODGE_SCALE, w, h) || nearestSpot(stations, 16 * STATION_SCALE, w, h);
+  if (spot) return spot;
   const lift = runMap.nearestLift(mouse, camera, w, h, 9);
   if (lift) return lift;
   ndc.set((mouse.x / w) * 2 - 1, -(mouse.y / h) * 2 + 1);
@@ -284,28 +323,32 @@ function pick() {
   return runMap.nearestRun(hit.x, hit.z, Math.max(20, mPerPx * 10));
 }
 
-// A lodge is hovered within its on-screen half-length of its roof.
+// A lodge or lift station is hovered within `reach` metres of its middle,
+// measured on screen; of several, the closest for its size.
 const lp = new THREE.Vector3();
-function nearestLodge(w, h) {
+function nearestSpot(list, reach, w, h) {
   const pxPerM = h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
-  for (const l of lodges) {
+  let best = null, bd = 1;
+  for (const l of list) {
     lp.copy(l.top).project(camera);
     if (lp.z > 1) continue;
-    const r = Math.max(12, (55 * LODGE_SCALE * pxPerM) / camera.position.distanceTo(l.top));
-    if (Math.hypot((lp.x + 1) * w / 2 - mouse.x, (1 - lp.y) * h / 2 - mouse.y) < r) return l;
+    const r = Math.max(12, (reach * pxPerM) / camera.position.distanceTo(l.top));
+    const d = Math.hypot((lp.x + 1) * w / 2 - mouse.x, (1 - lp.y) * h / 2 - mouse.y) / r;
+    if (d < bd) { bd = d; best = l; }
   }
-  return null;
+  return best;
 }
 const describeLodge = (l) => ({
   badge: 'lodge', zh: l.zh, en: l.en,
   rows: [[`${l.ele.toLocaleString()} m`, ''], ['Tickets · food · rental · first aid', '']],
 });
+const describe = (item) => (item.kind === 'lodge' ? describeLodge(item) : runMap.describe(item));
 
 function showTip(item) {
-  runMap.setHot(item?.kind === 'lodge' ? null : item);
+  runMap.setHot(item);
   canvas.style.cursor = item ? 'pointer' : dragging ? 'grabbing' : 'grab';
   if (!item) { tip.classList.add('hidden'); return; }
-  const d = item.kind === 'lodge' ? describeLodge(item) : runMap.describe(item);
+  const d = describe(item);
   tip.querySelector('.badge').className = `badge ${d.badge}`;
   tip.querySelector('.zh').textContent = d.zh;
   tip.querySelector('.en').textContent = d.en;
@@ -322,6 +365,50 @@ function placeTip() {
   tip.style.transform = `translate(${Math.max(12, x)}px, ${Math.max(12, y)}px)`;
 }
 
+// ---------- Navigation ----------
+// Clicking a place selects it; its card can frame it ("Look closer") or send
+// you into the game there.
+const nav = new Nav({
+  hf, runs: meta.runs, runMap, lodges, stations, describe,
+  onSelect: (item) => (item ? pauseSpin() : resumeSpinLater()),
+  onLook: (item) => {
+    const f = nav.focus(item);
+    flyCamera(viewOf(f.point, frameDistance(f.size)), f.point);
+  },
+  onGo: dive,
+});
+
+// Going: the camera dives at the spot while a cloud closes over the table, and
+// the game opens in that cloud (destinations.js has the ?at= keys). Coming back
+// with ?at= in the address, the table pulls out of the cloud the same way.
+const setCloud = createCloudWipe(document.getElementById('cloud'));
+let wipe = null;
+function dive(key, item) {
+  if (wipe) return;
+  const f = nav.focus(item, { dive: true });
+  flyCamera(viewOf(f.point, 160, [0.7, 1.0]), f.point, { dur: 1.3, ease: (t) => t * t * (3 - 2 * t) });
+  pauseSpin();
+  noteArrival(`Off to ${describe(item).zh}`);
+  wipe = { t: 0, dur: 1.3, cloud: (t) => THREE.MathUtils.smoothstep(t, 0.35, 1), done: () => location.assign(`./?at=${key}`) };
+}
+function emerge(item) {
+  const f = nav.focus(item);
+  controls.target.copy(f.point);
+  camera.position.copy(viewOf(f.point, 160, [0.7, 1.0]));
+  flyCamera(viewOf(f.point, frameDistance(f.size)), f.point, { dur: 2.2 });
+  setCloud(1);
+  wipe = { t: 0, dur: 2.2, cloud: (t) => 1 - THREE.MathUtils.smoothstep(t, 0.05, 0.55) };
+}
+const startAt = nav.itemOf(new URLSearchParams(location.search).get('at'));
+if (startAt) {
+  nav.select(startAt);
+  emerge(startAt);
+}
+// Back from the game with this page kept as it was: it's still in the cloud.
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted && nav.selected) emerge(nav.selected);
+});
+
 // ---------- Loop ----------
 const clock = new THREE.Clock();
 let time = 0;
@@ -333,12 +420,22 @@ function frame() {
   time += dt;
 
   if (flyTo) {
-    flyTo.t = Math.min(1, flyTo.t + dt / 1.4);
-    const k = 1 - (1 - flyTo.t) ** 3;
-    const dest = home.clone().add(new THREE.Vector3(0.45, 0.52, 0.72).normalize().multiplyScalar(fitDistance()));
-    camera.position.lerpVectors(flyTo.from, dest, k);
-    controls.target.lerpVectors(flyTo.fromT, home, k);
+    flyTo.t = Math.min(1, flyTo.t + dt / flyTo.dur);
+    const k = flyTo.ease(flyTo.t);
+    camera.position.lerpVectors(flyTo.from, flyTo.to, k);
+    controls.target.lerpVectors(flyTo.fromT, flyTo.toT, k);
+    // A dive goes closer than the zoom limit; don't let OrbitControls push back.
+    controls.minDistance = Math.min(MIN_ZOOM, camera.position.distanceTo(controls.target));
     if (flyTo.t >= 1) flyTo = null;
+  }
+  if (wipe) {
+    wipe.t = Math.min(1, wipe.t + dt / wipe.dur);
+    setCloud(wipe.cloud(wipe.t));
+    if (wipe.t >= 1) {
+      const w = wipe;
+      wipe = null;
+      w.done?.();
+    }
   }
   fly(dt);
   controls.update(dt);
@@ -365,5 +462,5 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
-window.__diorama = { scene, camera, controls, skiers, runMap, lifts, forest, renderer };
+window.__diorama = { scene, camera, controls, skiers, runMap, lifts, forest, renderer, nav, stations, lodges };
 requestAnimationFrame(frame);

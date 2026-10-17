@@ -43,6 +43,24 @@ see its name, length and drop. The East and West service centres
 (东区/西区服务大厅) stand at the foot of 1号 and 3号 gondolas; hover them too. Gondolas and chairs run on their cables, and
 little riders carve down the runs and chain from one run onto the next.
 
+Click a run, a lift, one of its stations or a service centre to pick it: it stays
+highlighted, and a card says what you can do there. **Look closer** flies the
+camera to it, and the main button takes you into the game there. The camera dives
+at the spot through a cloud, and the game opens in that cloud and drops you out
+of it:
+
+- a **run**: at its top, pointing downhill, ready to ride it;
+- a **bottom station**: beside it, to board with E (or **Board and ride up**
+  to go straight up); a **top station**: on the snow beside it, facing downhill;
+- a **service centre**: outside the hall, facing the gondola it boards.
+
+The place is written into the address as `?at=<key>` (`run:<OSM id>`,
+`lift:<OSM id>:bottom|top|ride` or `lodge:east|west`; see `src/destinations.js`).
+It works on both pages: `/?at=run:1127891878` opens the game at the top of
+Yunxiaofeng. In the game, R takes you back to that spot. The menu's diorama
+button opens the diorama on it again, pulling back out of the cloud, and so does
+the browser's Back button.
+
 It reuses the game's modules at toy proportions (oversized trees, lifts and
 riders). Its data is a separate, larger bake in `public/data/diorama/`, made
 with `npm run fetch-data -- diorama`.
@@ -86,7 +104,7 @@ edits were saved.
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
 | E | board a lift at its bottom station or a service centre (Space skips the ride) |
-| R | back to the top |
+| R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
 
 ## How it's built
 

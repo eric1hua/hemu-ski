@@ -13,6 +13,8 @@ import { Hud } from './hud.js';
 import { Sound } from './audio.js';
 import { createMenu } from './menu.js';
 import { createIsland, createTitleLetters, createSnowSpecks, createCloudWipe } from './intro.js';
+import { destinationFromURL, destinationKey, runTop, noteArrival, takeArrivalNote } from './destinations.js';
+import { liftTitle } from './diorama/names.js';
 
 const MAIN_RUN = '云霄峰道'; // Yunxiaofeng — the run under Gondola No. 6
 const TREELINE = 2350;
@@ -53,6 +55,9 @@ window.addEventListener('resize', resize);
 resize();
 
 // ---------- World ----------
+// Sent from the diorama, the loading screen says where to.
+const arrivalNote = takeArrivalNote();
+if (arrivalNote) document.querySelector('#loading > :last-child').textContent = arrivalNote;
 // The map editor's saved edits apply unless the URL says ?original.
 const world = await loadWorld('', { edits: !new URLSearchParams(location.search).has('original') });
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
@@ -96,6 +101,9 @@ const runLength = mainRun.points.reduce((s, p, i, a) => (i ? s + Math.hypot(p[0]
 const startAt = along(mainRun.points, 14);
 const gateAt = along(mainRun.points, 26);
 const yawOf = (dx, dz) => Math.atan2(-dx, -dz);
+// Where a run starts and R takes you back to: here, unless the diorama sent
+// you somewhere else (see Destinations, below).
+let spawn = { key: `run:${mainRun.id}`, x: startAt.x, z: startAt.z, dx: startAt.dx, dz: startAt.dz, toast: 'Drop in!' };
 scene.add(createBanner(detail, new THREE.Vector3(gateAt.x, 0, gateAt.z), new THREE.Vector3(-gateAt.dx, 0, -gateAt.dz), ['云霄峰道 · START', 'Yunxiaofeng · Gondola No.6'], '#f0c24a'));
 
 // Lifts you can ride: each one's cable from its bottom station to its top.
@@ -108,7 +116,7 @@ const rides = lifts.lines.map((l) => {
   const bottom = up ? l.a : l.b, top = up ? l.b : l.a;
   const dir = new THREE.Vector3(top.x - bottom.x, 0, top.z - bottom.z).normalize();
   const label = l.name || (l.type === 'gondola' ? 'Gondola' : 'Chair lift');
-  return { label, bottom, top, dir, cable, acc, length: acc[acc.length - 1] };
+  return { id: l.id, label, bottom, top, dir, cable, acc, length: acc[acc.length - 1] };
 });
 const boardSpots = [
   ...SERVICE_CENTRES.map((c) => ({ ride: rides.find((r) => r.label === c.lift), x: c.x, z: c.z, r: 150, hall: c })),
@@ -137,6 +145,7 @@ window.addEventListener('keydown', (e) => {
   sound.start();
   if ((e.code === 'Enter' || e.code === 'Space') && state === 'title') { begin(); return; }
   if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
+  if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
   if (e.code === 'KeyR' && state === 'ride') startRun();
   if (e.code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((e.code === 'KeyE' || e.code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
@@ -169,20 +178,20 @@ document.getElementById('panel-next').addEventListener('click', () => {
 });
 
 // ---------- Game state ----------
-let state = 'title'; // title → swoop → intro → ride ⇄ lift
+let state = 'title'; // title → swoop → intro → ride ⇄ lift, or arrive → ride from the diorama
 let elapsed = 0, timing = false, falls = 0;
 let camDir = new THREE.Vector3(startAt.dx, 0, startAt.dz);
 
 function startRun() {
-  phys.reset(startAt.x, startAt.z, yawOf(startAt.dx, startAt.dz));
+  phys.reset(spawn.x, spawn.z, yawOf(spawn.dx, spawn.dz));
   trail.clear();
   elapsed = 0; timing = false; falls = 0;
   rider.pose.tumble = 0;
-  camDir.set(startAt.dx, 0, startAt.dz);
+  camDir.set(spawn.dx, 0, spawn.dz);
   snapCamera();
   state = 'ride';
   hud.show(true);
-  hud.toast('Drop in!');
+  hud.toast(spawn.toast, 2000);
 }
 
 phys.reset(startAt.x, startAt.z, yawOf(startAt.dx, startAt.dz));
@@ -425,7 +434,7 @@ function frame() {
       if (ev.type === 'respawn') respawnInPlace();
       if (ev.type === 'air') hud.toast(ev.spin >= 180 ? `${ev.spin}°!` : `Air ${ev.time.toFixed(1)}s`);
     }
-    if (!timing && phys.pos.distanceTo(new THREE.Vector3(startAt.x, phys.pos.y, startAt.z)) > 3) timing = true;
+    if (!timing && phys.pos.distanceTo(new THREE.Vector3(spawn.x, phys.pos.y, spawn.z)) > 3) timing = true;
     if (timing) elapsed += dt;
     updateBoarding();
 
@@ -457,8 +466,10 @@ function frame() {
     if (state === 'intro') updateIntroCamera(dt);
     else if (state === 'title') updateTitleCamera(dt);
     else if (state === 'swoop') updateSwoop(dt);
+    else if (state === 'arrive') updateArrival(dt);
     sound.update(0, 0, false);
   }
+  if (leaving) updateLeaving(dt);
   letters.update(dt, time, camera, titleDist * 0.45, pointer);
   specks.update(dt, time, camera, titleDist, renderer.getPixelRatio());
   if (island.visible) island.update(time);
@@ -522,7 +533,7 @@ function updateBoarding() {
   atHall = hall;
   hud.prompt(boardable
     ? `${hall ? `${hall.en} · ` : ''}<kbd>E</kbd> ride <b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`
-    : '');
+    : !timing && spawn.hint ? spawn.hint : '');
 }
 
 let liftRide = null;
@@ -569,23 +580,9 @@ function updateLift(dt) {
 // Step off at the top station onto the best open snow nearby, facing downhill.
 function unload(ride) {
   const P = ride.top;
-  const blocked = (x, z) => phys.obstacles.some((o) => Math.hypot(x - o.x, z - o.z) < Math.hypot(o.hw, o.hd) + 3);
-  let best = null;
-  for (const R of [26, 36, 48]) { // within reach of a lift that starts here
-    for (let k = 0; k < 24; k++) {
-      const a = (k / 24) * Math.PI * 2;
-      const x = P.x + Math.cos(a) * R, z = P.z + Math.sin(a) * R;
-      if (!detail.inside(x, z, 60) || detail.holeAt(x, z) || blocked(x, z) || forest.hit(x, z, 3)) continue;
-      detail.normalAt(x, z, _n);
-      const slope = 1 - _n.y;
-      const score = (piste.distAt(x, z) < PISTE_HALF_WIDTH ? 1 : 0) + Math.min(slope, 0.12) * 6 - R * 0.004;
-      if (!best || score > best.score) best = { x, z, score, dx: _n.x, dz: _n.z };
-    }
-  }
-  const at = best ?? { x: P.x + ride.dir.x * 30, z: P.z + ride.dir.z * 30, dx: ride.dir.x, dz: ride.dir.z };
-  const len = Math.hypot(at.dx, at.dz) || 1;
-  phys.reset(at.x, at.z, yawOf(at.dx / len, at.dz / len));
-  camDir.set(at.dx / len, 0, at.dz / len);
+  const at = topSpot(ride);
+  phys.reset(at.x, at.z, yawOf(at.dx, at.dz));
+  camDir.set(at.dx, 0, at.dz);
   snapCamera();
   rider.root.visible = true;
   cabin.visible = false;
@@ -594,8 +591,177 @@ function unload(ride) {
   hud.prompt('');
   hud.toast(`${ride.label} · ${Math.round(P.y).toLocaleString()} m`, 2000);
 }
+function topSpot(ride) {
+  const P = ride.top;
+  const best = openSpot(P, [26, 36, 48], (x, z, n, R) => // within reach of a lift that starts here
+    (piste.distAt(x, z) < PISTE_HALF_WIDTH ? 1 : 0) + Math.min(1 - n.y, 0.12) * 6 - R * 0.004);
+  return best
+    ? facing({ x: best.x, z: best.z, dx: best.nx, dz: best.nz }, ride.dir)
+    : { x: P.x + ride.dir.x * 30, z: P.z + ride.dir.z * 30, dx: ride.dir.x, dz: ride.dir.z };
+}
+
+// Open snow: on the map, not in a deleted tile, clear of buildings and trees.
+const blocked = (x, z) => phys.obstacles.some((o) => Math.hypot(x - o.x, z - o.z) < Math.hypot(o.hw, o.hd) + 3);
+const openGround = (x, z) => detail.inside(x, z, 60) && !detail.holeAt(x, z) && !blocked(x, z) && !forest.hit(x, z, 3);
+// The best open snow on rings round P, ranked by score(x, z, groundNormal, R).
+function openSpot(P, radii, score) {
+  let best = null;
+  for (const R of radii)
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      const x = P.x + Math.cos(a) * R, z = P.z + Math.sin(a) * R;
+      if (!openGround(x, z)) continue;
+      detail.normalAt(x, z, _n);
+      const sc = score(x, z, _n, R);
+      if (!best || sc > best.score) best = { x, z, score: sc, nx: _n.x, nz: _n.z };
+    }
+  return best;
+}
+// Makes a spot's heading a unit vector; on dead-flat ground, where there's no
+// downhill to face, it takes `or` instead.
+function facing(at, or) {
+  const len = Math.hypot(at.dx, at.dz);
+  if (len < 1e-4) { at.dx = or.x; at.dz = or.z; } else { at.dx /= len; at.dz /= len; }
+  return at;
+}
+
+// ---------- Destinations ----------
+// The diorama sends you here with ?at=<key> (see destinations.js): to the top
+// of a run, beside a lift station, or outside a service centre. It becomes your
+// spawn, where R takes you back to, and the menu's way back to the diorama
+// opens on it. Returns the spawn, or null if the key names nothing here.
+const HINT = '<kbd>A</kbd><kbd>D</kbd> carve · <kbd>W</kbd> tuck or push · <kbd>R</kbd> back here';
+function resolveDestination(dest) {
+  const key = destinationKey(dest);
+  if (dest.kind === 'run') {
+    const top = runTop(detail, meta.runs, dest.id);
+    if (!top) return null;
+    // A few metres down from the top, past any lift station there and any
+    // rise the smoothed terrain leaves at the very top, so you set off downhill.
+    const rises = (a) => detail.heightAt(a.x + a.dx * 15, a.z + a.dz * 15) > detail.heightAt(a.x, a.z) - 0.3;
+    let d = 14, at = along(top.points, d);
+    while (d < 120 && (!openGround(at.x, at.z) || rises(at))) at = along(top.points, (d += 6));
+    return { key, x: at.x, z: at.z, dx: at.dx, dz: at.dz, toast: 'Drop in!', hint: `<b>${top.run.name || 'Unnamed run'}</b> · ${HINT}` };
+  }
+  if (dest.kind === 'lodge') {
+    const c = SERVICE_CENTRES.find((sc) => sc.id === dest.id);
+    if (!c) return null;
+    // Out the front, on level ground, facing the gondola the hall boards.
+    const fx = c.faceTo[0] - c.x, fz = c.faceTo[1] - c.z, fl = Math.hypot(fx, fz);
+    const at = openSpot(c, [80, 95, 110, 130], (x, z, n, R) => (((x - c.x) * fx + (z - c.z) * fz) / (R * fl)) * 2 - (1 - n.y) * 8 - R * 0.01);
+    if (!at) return null;
+    return facing({ key, x: at.x, z: at.z, dx: c.faceTo[0] - at.x, dz: c.faceTo[1] - at.z, toast: c.zh, hint: HINT }, camDir);
+  }
+  const lift = meta.lifts.find((l) => String(l.id) === dest.id);
+  if (!lift) return null;
+  // Magic carpets aren't rides; their ends still make places to start from.
+  const ride = rides.find((r) => String(r.id) === dest.id) ?? liftEnds(lift);
+  const { zh } = liftTitle(lift);
+  if (dest.end === 'top') {
+    return { key, ...topSpot(ride), toast: `${zh} · ${Math.round(ride.top.y).toLocaleString()} m`, hint: HINT };
+  }
+  // Beside the bottom station on the side you'd queue from, facing it.
+  const P = ride.bottom;
+  const at = openSpot(P, [22, 30, 40, 50], (x, z, n, R) =>
+    -(((x - P.x) * ride.dir.x + (z - P.z) * ride.dir.z) / R) * 0.5 - (1 - n.y) * 6 - R * 0.01);
+  if (!at) return null;
+  return facing({
+    key, x: at.x, z: at.z, dx: P.x - at.x, dz: P.z - at.z,
+    toast: `${zh} · ${Math.round(P.y).toLocaleString()} m`, hint: HINT,
+    board: dest.end === 'ride' && ride.cable ? ride : null,
+  }, ride.dir);
+}
+function liftEnds(lift) {
+  const [a, b] = [lift.points[0], lift.points[lift.points.length - 1]].map(([x, z]) => new THREE.Vector3(x, detail.heightAt(x, z), z));
+  const [bottom, top] = a.y <= b.y ? [a, b] : [b, a];
+  return { bottom, top, dir: new THREE.Vector3(top.x - bottom.x, 0, top.z - bottom.z).normalize() };
+}
+
+// ---------- Arrival ----------
+// From the diorama the page opens inside the cloud the diorama dived into. The
+// camera drops out of it, from high over the spot to just behind the rider,
+// and you're off (or, for "Board and ride up", straight onto the lift).
+// Space, Enter or Escape skips the drop.
+let arrival = null;
+function arrive(dest) {
+  spawn = dest;
+  linkDiorama();
+  state = 'arrive';
+  setTitleWorld(false);
+  letters.group.visible = false;
+  specks.opacity = 0;
+  titleEl.classList.add('hidden');
+  panel.classList.add('hidden'); // ?notitle opens on the intro panel
+  panelNext = null;
+  phys.reset(spawn.x, spawn.z, yawOf(spawn.dx, spawn.dz));
+  camDir.set(spawn.dx, 0, spawn.dz);
+  const end = new THREE.Vector3(), look = new THREE.Vector3();
+  cameraTarget(end, look);
+  const from = end.clone().addScaledVector(camDir, -260);
+  from.y += 380;
+  // A beat in the cloud first while the loading screen fades.
+  arrival = { t: -0.25, dur: 2.8, end, look, from };
+  setCloud(1);
+  updateArrival(0);
+}
+function updateArrival(dt) {
+  const A = arrival;
+  A.t = Math.min(1, A.t + dt / A.dur);
+  const u = Math.max(0, A.t);
+  const e = u * u * u * (u * (u * 6 - 15) + 10); // smootherstep
+  // The gap closes by the same share each moment, as on the title's flight.
+  const k = (Math.pow(0.01, e) - 0.01) / 0.99;
+  camera.position.lerpVectors(A.end, A.from, k);
+  camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 2);
+  camLook.copy(A.look);
+  camera.lookAt(camLook);
+  setLens(60, Math.max(6, camera.position.distanceTo(A.look)));
+  setCloud(1 - THREE.MathUtils.smoothstep(u, 0, 0.4));
+  if (A.t < 1) return;
+  setCloud(0);
+  setLens(60, 6);
+  arrival = null;
+  startRun();
+  if (spawn.board) board(spawn.board);
+}
+
+// ---------- Back to the diorama ----------
+// The menu's diorama button opens it on your spawn, after the cloud closes
+// over the slope the way the diorama's own dive does.
+const dioramaLink = document.querySelector('#menu a.go');
+function linkDiorama() {
+  dioramaLink.href = `./diorama.html?at=${spawn.key}`;
+}
+let leaving = null;
+dioramaLink.addEventListener('click', (e) => {
+  if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // a new tab or window
+  e.preventDefault();
+  if (leaving) return;
+  noteArrival('Back to the diorama');
+  leaving = { t: 0, href: dioramaLink.href };
+});
+function updateLeaving(dt) {
+  leaving.t = Math.min(1, leaving.t + dt / 0.7);
+  setCloud(THREE.MathUtils.smoothstep(leaving.t, 0, 1));
+  if (leaving.t >= 1) {
+    location.assign(leaving.href);
+    leaving = null;
+  }
+}
+// Back here with the page kept as it was: it's still in the cloud.
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) setCloud(0);
+});
+
+linkDiorama();
+const asked = destinationFromURL();
+if (asked) {
+  const dest = resolveDestination(asked);
+  if (dest) arrive(dest);
+  else console.warn(`No ${asked.kind} ${asked.id} on this map; starting at the top.`);
+}
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, get state() { return state; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);
