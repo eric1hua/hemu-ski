@@ -11,6 +11,7 @@ import { BoardPhysics } from './player/physics.js';
 import { Trail, Spray } from './player/fx.js';
 import { Hud } from './hud.js';
 import { Sound } from './audio.js';
+import { createIsland, createTitleLetters, createSnowSpecks, createCloudWipe } from './intro.js';
 
 const MAIN_RUN = '云霄峰道'; // Yunxiaofeng — the run under Gondola No. 6
 const TREELINE = 2350;
@@ -132,6 +133,8 @@ window.addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   sound.start();
+  if ((e.code === 'Enter' || e.code === 'Space') && state === 'title') { begin(); return; }
+  if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
   if (e.code === 'KeyR' && state === 'ride') startRun();
   if (e.code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((e.code === 'KeyE' || e.code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
@@ -164,7 +167,7 @@ document.getElementById('panel-next').addEventListener('click', () => {
 });
 
 // ---------- Game state ----------
-let state = 'intro'; // intro → ride ⇄ lift
+let state = 'title'; // title → swoop → intro → ride ⇄ lift
 let elapsed = 0, timing = false, falls = 0;
 let camDir = new THREE.Vector3(startAt.dx, 0, startAt.dz);
 
@@ -181,7 +184,7 @@ function startRun() {
 }
 
 phys.reset(startAt.x, startAt.z, yawOf(startAt.dx, startAt.dz));
-showPanel('Hemu · 禾木', `
+const introPanel = () => showPanel('Hemu · 禾木', `
   <p>Top of <b>Gondola No. 6</b>, Hemu Jikepulin, Altay — 2,756 m.
   The whole mountain is yours: drop into <b>云霄峰道 Yunxiaofeng</b> (${Math.round(runLength)} m) or ride anywhere,
   all the way down the valley to the <b>East Service Centre</b> (东区服务大厅), 1,300 m below.
@@ -215,17 +218,146 @@ function snapCamera() {
 
 let introT = 0;
 // Slow orbit around the rider's toe side — a portrait shot with the run behind.
+function introPose(t, pos, look) {
+  const a = Math.sin(t * 0.25) * 0.6;
+  pos.set(Math.cos(a) * 5.5, 1.6, Math.sin(a) * 5.5 - 1.5).applyQuaternion(rider.root.quaternion).add(phys.pos);
+  pos.y = Math.max(pos.y, detail.heightAt(pos.x, pos.z) + 1);
+  look.copy(phys.pos);
+  look.y -= 0.6; // keeps the rider in the upper half, clear of the panel
+}
 function updateIntroCamera(dt) {
   introT += dt;
-  const a = Math.sin(introT * 0.25) * 0.6;
-  _w.set(Math.cos(a) * 5.5, 1.6, Math.sin(a) * 5.5 - 1.5).applyQuaternion(rider.root.quaternion);
-  camera.position.copy(phys.pos).add(_w);
-  camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 1);
-  _look.copy(phys.pos);
-  _look.y -= 0.6; // keeps the rider in the upper half, clear of the panel
+  introPose(introT, camera.position, _look);
   camera.lookAt(_look);
-  camera.fov = 50;
+  setLens(50, 6);
+}
+
+// The title and the flight down scale the near plane and the ink pass's line
+// thresholds with distance, so a 20 km view draws like a close-up.
+function setLens(fov, dist) {
+  camera.fov = fov;
+  camera.near = THREE.MathUtils.clamp(dist / 400, 0.3, 50);
   camera.updateProjectionMatrix();
+  post.material.uniforms.uDepthScale.value = THREE.MathUtils.clamp(150 / dist, 0.005, 1);
+}
+
+// ---------- Title ----------
+// ?notitle skips straight to the panel at the top station.
+const TITLE_FOV = 30;
+const TITLE_ELEVATION = THREE.MathUtils.degToRad(24);
+const FOG = { near: scene.fog.near, far: scene.fog.far };
+const island = createIsland(detail, piste, { ...meta.detail, treeline: TREELINE });
+const letters = createTitleLetters();
+const specks = createSnowSpecks();
+const setCloud = createCloudWipe(document.getElementById('cloud'));
+const titleEl = document.getElementById('title');
+scene.add(island, camera);
+camera.add(letters.group, specks.points);
+const pointer = new THREE.Vector2();
+window.addEventListener('pointermove', (e) => pointer.set((e.clientX / innerWidth) * 2 - 1, 1 - (e.clientY / innerHeight) * 2));
+document.getElementById('begin').addEventListener('click', () => begin());
+
+let orbitA = 0.5; // 0 looks up the valley from the south
+// Far enough out for the island's bounding sphere to fill the narrower field of view.
+function titleDistance() {
+  const vf = THREE.MathUtils.degToRad(TITLE_FOV) / 2;
+  const hf = Math.atan(Math.tan(vf) * camera.aspect);
+  return (island.userData.radius / Math.sin(Math.min(vf, hf))) * (camera.aspect < 1 ? 1 : 0.9);
+}
+function titlePose(pos, look) {
+  const D = titleDistance(), c = island.userData.center;
+  pos.set(Math.sin(orbitA) * Math.cos(TITLE_ELEVATION), Math.sin(TITLE_ELEVATION), Math.cos(orbitA) * Math.cos(TITLE_ELEVATION))
+    .multiplyScalar(D).add(c);
+  look.copy(c);
+  return D;
+}
+function setTitleWorld(on) {
+  island.visible = on;
+  backdrop.visible = !on;
+  sky.material.uniforms.uFloat.value = on ? 1 : 0;
+  scene.fog.near = on ? 1e7 : FOG.near;
+  scene.fog.far = on ? 2e7 : FOG.far;
+}
+let titleDist = 1;
+function updateTitleCamera(dt) {
+  orbitA += dt * 0.035;
+  titleDist = titlePose(camera.position, camLook);
+  camera.lookAt(camLook);
+  setLens(TITLE_FOV, titleDist);
+}
+
+// Begin: the letters scatter and the camera dives from the title orbit to the
+// portrait shot at the top station. Distance shrinks exponentially (so each
+// second covers the same share of the way, from 20 km down to 6 m), the camera
+// circles round to the rider's side, diving steeper midway, and a cloud 4.5 km
+// out hides the swap from the island to the full valley.
+let swoop = null;
+function begin() {
+  if (state !== 'title') return;
+  state = 'swoop';
+  sound.start();
+  titleEl.classList.add('gone');
+  letters.leave();
+  const pos1 = new THREE.Vector3(), anchor = new THREE.Vector3();
+  introPose(0, pos1, anchor);
+  const from = new THREE.Spherical().setFromVector3(camera.position.clone().sub(anchor));
+  const to = new THREE.Spherical().setFromVector3(pos1.clone().sub(anchor));
+  // Turn the short way round.
+  to.theta = from.theta + THREE.MathUtils.euclideanModulo(to.theta - from.theta + Math.PI, Math.PI * 2) - Math.PI;
+  const l0 = from.radius, l1 = to.radius;
+  swoop = {
+    t: 0, dur: 6.5, anchor, l0, l1, from, to,
+    lookOff: camLook.clone().sub(anchor),
+    clearAt: Math.log(l0 / 4500) / Math.log(l0 / l1), // progress when 4.5 km out
+    cleared: false,
+  };
+}
+const _sph = new THREE.Spherical();
+function updateSwoop(dt) {
+  const S = swoop;
+  S.t = Math.min(1, S.t + dt / S.dur);
+  const e = S.t * S.t * S.t * (S.t * (S.t * 6 - 15) + 10); // smootherstep
+  const u = THREE.MathUtils.smoothstep(S.t, 0, 0.85);
+  _sph.set(
+    S.l0 * Math.pow(S.l1 / S.l0, e),
+    THREE.MathUtils.lerp(S.from.phi, S.to.phi, u) - Math.sin(Math.PI * u) * 0.45, // dive steeper midway
+    THREE.MathUtils.lerp(S.from.theta, S.to.theta, u),
+  );
+  const len = _sph.radius;
+  camera.position.setFromSpherical(_sph).add(S.anchor);
+  if (detail.inside(camera.position.x, camera.position.z))
+    camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 2);
+  // The look point starts on the island's middle and closes on the rider as fast as the camera does.
+  camLook.copy(S.anchor).addScaledVector(S.lookOff, (len / S.l0) * (1 - e));
+  camera.lookAt(camLook);
+  setLens(THREE.MathUtils.lerp(TITLE_FOV, 50, e), len);
+
+  setCloud(THREE.MathUtils.clamp((0.1 - Math.abs(e - S.clearAt)) / 0.07, 0, 1));
+  specks.opacity = 1 - THREE.MathUtils.smoothstep(S.t, 0.05, 0.3);
+  if (!S.cleared && e >= S.clearAt) {
+    S.cleared = true;
+    setTitleWorld(false);
+  }
+  if (S.t >= 1) {
+    setCloud(0);
+    letters.group.visible = false; // still tumbling if the flight was skipped
+    titleEl.classList.add('hidden');
+    swoop = null;
+    state = 'intro';
+    introT = 0;
+    introPanel();
+  }
+}
+
+if (new URLSearchParams(location.search).has('notitle')) {
+  state = 'intro';
+  setTitleWorld(false);
+  letters.group.visible = false;
+  specks.opacity = 0;
+  titleEl.classList.add('hidden');
+  introPanel();
+} else {
+  setTitleWorld(true);
 }
 
 function updateRideCamera(dt) {
@@ -321,8 +453,13 @@ function frame() {
   } else {
     poseRider(dt);
     if (state === 'intro') updateIntroCamera(dt);
+    else if (state === 'title') updateTitleCamera(dt);
+    else if (state === 'swoop') updateSwoop(dt);
     sound.update(0, 0, false);
   }
+  letters.update(dt, time, camera, titleDist * 0.45, pointer);
+  specks.update(dt, time, camera, titleDist, renderer.getPixelRatio());
+  if (island.visible) island.update(time);
 
   spray.update(dt);
   lifts.update(dt);
@@ -335,7 +472,7 @@ function frame() {
   sun.position.copy(phys.pos).addScaledVector(sunDir, 250);
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, spray.points, backdrop, ...forest.farMeshes]);
+  post.render(scene, camera, time, [sky, spray.points, specks.points, backdrop, ...forest.farMeshes]);
   requestAnimationFrame(frame);
 }
 

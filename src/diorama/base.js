@@ -17,7 +17,7 @@ function canvasTexture(w, h, draw) {
 
 // Earth strata, bedrock at the bottom (v = 0) up to soil under the snow (v = 1).
 // Band edges wave with whole-number frequencies so the texture tiles in u.
-function strataTexture() {
+export function strataTexture() {
   const bands = [
     [0.0, '#5d6264'], [0.16, '#6f7472'], [0.3, '#7d6a5a'], [0.44, '#8f7a63'],
     [0.56, '#a48a6c'], [0.68, '#8c735d'], [0.8, '#a79680'], [0.9, '#7f6a58'],
@@ -105,12 +105,12 @@ function compassTexture() {
 
 // One vertical wall strip under an edge of the heightfield. `ks` lists the
 // edge vertex indices in order; `outward` is the face direction.
-function wallStrip(hf, ks, outward, yTop, yBot, uvTop) {
+export function wallStrip(hf, ks, outward, yTop, yBot, uvTop) {
   const pos = [], uv = [], idx = [];
-  const { verts, size, half, cells } = hf;
+  const { verts, size, cells, x0, z0 } = hf;
   let along = 0, prev = null;
   ks.forEach((k, n) => {
-    const x = -half + ((k % verts) / cells) * size, z = -half + (Math.floor(k / verts) / cells) * size;
+    const x = x0 + ((k % verts) / cells) * size, z = z0 + (Math.floor(k / verts) / cells) * size;
     if (prev) along += Math.hypot(x - prev[0], z - prev[1]);
     prev = [x, z];
     const top = yTop(hf.h[k]), bot = yBot(hf.h[k]);

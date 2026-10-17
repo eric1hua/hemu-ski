@@ -1,4 +1,5 @@
-// Flat teal sky with painted, stretched cloud shapes in three tones.
+// Flat teal sky with painted, stretched cloud shapes in three tones. `uFloat` 1
+// mirrors the sky below the horizon too, for the title's island in the clouds.
 import * as THREE from 'three';
 
 export const SKY = {
@@ -19,6 +20,7 @@ export function createSky() {
       uCloudLight: { value: SKY.cloudLight },
       uCloudDark: { value: SKY.cloudDark },
       uTime: { value: 0 },
+      uFloat: { value: 0 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -30,6 +32,7 @@ export function createSky() {
     fragmentShader: /* glsl */ `
       uniform vec3 uZenith, uHorizon, uCloudLight, uCloudDark;
       uniform float uTime;
+      uniform float uFloat;
       varying vec3 vDir;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float noise(vec2 p) {
@@ -44,8 +47,10 @@ export function createSky() {
       }
       void main() {
         vec3 d = normalize(vDir);
+        d.y = mix(d.y, abs(d.y), uFloat);
         float h = max(d.y, 0.0);
         vec3 col = mix(uHorizon, uZenith, pow(h, 0.55));
+        col = mix(col, uZenith, uFloat * 0.35);
         if (d.y > 0.0) {
           vec2 uv = d.xz / (d.y + 0.18);
           uv = vec2(uv.x * 0.55, uv.y * 1.3) + vec2(uTime * 0.004, 0.0);

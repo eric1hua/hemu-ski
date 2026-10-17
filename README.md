@@ -20,6 +20,11 @@ npm install
 npm run dev
 ```
 
+The game opens on a title screen in the style of Messenger: the resort floats in
+the sky as a small island behind block letters. **Begin** (or Enter) flies the
+camera down through a cloud to the top station; Space skips the flight, and
+`?notitle` in the URL skips the title altogether.
+
 Or double-click `scripts/Hemu Ski.command` (a symlink to it on the Desktop works
 too). It starts the server on port 5190 and opens the game. Close the Terminal
 window to stop the server.
