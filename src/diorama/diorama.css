@@ -44,6 +44,16 @@
 }
 .badge.lift { background: var(--accent); border-radius: 4px; width: 18px; height: 12px; }
 .badge.lodge { background: #5f8064; border-radius: 6px 6px 1px 1px; width: 18px; height: 14px; }
+/* A map pin, point down. */
+.badge.you { background: var(--accent); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+
+/* The "You" pin's tag, over its head on the table. Under the cards. */
+.dio-you {
+  position: fixed; left: 0; top: 0; pointer-events: none; margin-top: -6px;
+  font-family: 'Patrick Hand SC', cursive; font-size: 17px; letter-spacing: 1px; line-height: 1;
+  background: var(--accent); border: 2.5px solid var(--ink); padding: 2px 9px 4px;
+  box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
 
 .dio-tip {
   position: fixed; left: 0; top: 0; pointer-events: none; z-index: 5;

@@ -1,5 +1,7 @@
-// Sidebar menu: a shortcut to the diorama, panels kept for outfit & gear and
-// settings, and music / sound-effect toggles that are remembered between visits.
+// Sidebar menu: a shortcut to the diorama, panels for the rider (see main.js),
+// outfit & gear and settings, and music / sound-effect toggles. Settings are
+// remembered between visits; createMenu() hands back { prefs, save } so the
+// game can keep its rider in the same place.
 const PREFS_KEY = 'hemu-ski.prefs';
 
 function loadPrefs() {
@@ -66,4 +68,6 @@ export function createMenu(sound) {
   window.addEventListener('pointerdown', (e) => {
     if (open && !root.contains(e.target)) show(null);
   });
+
+  return { prefs, save };
 }

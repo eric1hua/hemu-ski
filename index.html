@@ -19,7 +19,9 @@
         <div><label>Time</label><b id="time">0:00.0</b></div>
         <div><label>Alt</label><b id="alt">0</b><small>m</small></div>
       </div>
-      <canvas id="minimap" width="200" height="200"></canvas>
+      <button type="button" id="minimap-open" data-tip="Map · M" aria-label="Open the map (M)" aria-controls="bigmap" aria-expanded="false">
+        <canvas id="minimap" width="200" height="200"></canvas>
+      </button>
       <div id="toast"></div>
       <div id="prompt"></div>
     </div>
@@ -35,6 +37,14 @@
           </svg>
         </a>
         <hr />
+        <button class="mi" data-flyout="rider" data-tip="Rider" aria-label="Rider" aria-expanded="false" aria-controls="fly-rider">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#4f8fd6" d="M4.5 21.5c.4-3.9 3.6-6 7.5-6s7.1 2.1 7.5 6z" />
+            <circle fill="#f3d6bd" cx="12" cy="10" r="4.6" />
+            <path fill="#fbfaf5" d="M7 10.2a5 5 0 0 1 10 0z" />
+            <rect fill="#f0c24a" x="8" y="9.4" width="8" height="2.8" rx="1.3" />
+          </svg>
+        </button>
         <button class="mi" data-flyout="outfit" data-tip="Outfit &amp; gear" aria-label="Outfit &amp; gear" aria-expanded="false" aria-controls="fly-outfit">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path fill="#d9534a" d="M9 3.5 5.5 5l-3 6 3 1.5L7 10v10.5h10V10l1.5 2.5 3-1.5-3-6L15 3.5c-.5 1.6-1.6 2.5-3 2.5s-2.5-.9-3-2.5z" />
@@ -69,17 +79,23 @@
         </button>
       </div>
 
+      <section class="flyout hidden" id="fly-rider" aria-label="Rider">
+        <div class="tab">Rider</div>
+        <div class="riders" role="group" aria-label="Choose a rider" aria-describedby="rider-status">
+          <button type="button" data-rider="male" aria-pressed="false">Male rider</button>
+          <button type="button" data-rider="female" aria-pressed="false">Female rider</button>
+          <button type="button" data-rider="classic" aria-pressed="false">Classic rider</button>
+        </div>
+        <p id="rider-status" role="status" aria-live="polite">Loading rider…</p>
+        <p class="keys"><kbd>F</kbd> switch board / on foot<br><kbd>W</kbd> walk · <kbd>Shift</kbd> run<br><kbd>A</kbd> / <kbd>D</kbd> turn · <kbd>S</kbd> stop</p>
+      </section>
       <section class="flyout hidden" id="fly-outfit" aria-label="Outfit &amp; gear">
         <div class="tab">Outfit &amp; gear</div>
-        <p><label for="rider-select">Rider</label><br>
-          <select id="rider-select" aria-describedby="rider-status" style="width:100%;font:inherit;color:inherit;background:var(--paper);border:2px solid var(--ink);padding:6px">
-            <option value="male">Male rider</option>
-            <option value="female">Female rider</option>
-            <option value="classic">Classic rider</option>
-          </select>
-        </p>
-        <p id="rider-status" role="status" aria-live="polite">Loading rider…</p>
-        <p><kbd>F</kbd> switch board / on foot<br><kbd>W</kbd> walk · <kbd>Shift</kbd> run<br><kbd>A</kbd> / <kbd>D</kbd> turn · <kbd>S</kbd> stop</p>
+        <ul class="slots">
+          <li>Helmet</li><li>Goggles</li><li>Jacket</li>
+          <li>Gloves</li><li>Pants</li><li>Board</li>
+        </ul>
+        <p class="soon">Coming soon</p>
       </section>
       <section class="flyout hidden" id="fly-settings" aria-label="Settings">
         <div class="tab">Settings</div>
@@ -92,6 +108,29 @@
       <div class="tab" id="panel-tab">Hemu · 禾木</div>
       <div class="body" id="panel-body"></div>
       <button class="next" id="panel-next" aria-label="Continue">▶</button>
+    </div>
+
+    <!-- The whole map, opened from the mini-map; the ride waits underneath. -->
+    <div id="bigmap" class="hidden">
+      <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="bigmap-tab">
+        <div class="tab" id="bigmap-tab">Map · 禾木</div>
+        <button type="button" class="x" aria-label="Close the map">×</button>
+        <div class="frame">
+          <canvas></canvas>
+          <div class="you" aria-hidden="true">
+            <i></i>
+            <svg viewBox="-12 -12 24 24"><path d="M0-11 7 8 0 4-7 8z" /></svg>
+            <b>You</b>
+          </div>
+        </div>
+        <div class="foot">
+          <p class="here"><span class="badge"></span><span class="name"></span><span class="alt"></span></p>
+          <div class="acts">
+            <button type="button" class="go">See it on the diorama ▸</button>
+            <button type="button" class="back">Back to riding</button>
+          </div>
+        </div>
+      </section>
     </div>
 
     <div id="title">

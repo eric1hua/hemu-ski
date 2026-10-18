@@ -15,8 +15,9 @@ import { createBase } from './base.js';
 import { Skiers } from './skiers.js';
 import { RunMap } from './runs.js';
 import { Nav } from './nav.js';
+import { YouMarker } from './you.js';
 import { createCloudWipe } from '../intro.js';
-import { noteArrival, takeArrivalNote } from '../destinations.js';
+import { noteArrival, takeArrivalNote, parseWhereabouts, watchWhereabouts } from '../destinations.js';
 
 const TREELINE = 2350;
 // Toy proportions: props are oversized so they read from across the table.
@@ -101,6 +102,15 @@ const skiers = new Skiers(hf, meta.runs, { count: RIDERS, scale: RIDER_SCALE });
 scene.add(skiers.group);
 const sky = createSky();
 scene.add(sky);
+// Where you are in the game: from the address (?you=), or else from a game
+// open in another window, which keeps it moving as you ride.
+const you = new YouMarker(hf, meta.center, document.getElementById('you-tag'), sunDir);
+scene.add(you.group);
+const savedYou = watchWhereabouts((w) => {
+  you.set(w);
+  youMoved();
+});
+you.set(parseWhereabouts(new URLSearchParams(location.search).get('you')) ?? savedYou);
 
 document.getElementById('stats').textContent =
   `${runMap.groups.filter((g) => g.name).length} named runs · ${meta.lifts.length} lifts · ${RIDERS} riders`;
@@ -311,7 +321,8 @@ window.addEventListener('pointerup', (e) => {
 function pick() {
   if (!pointerIn || dragging) return null;
   const w = window.innerWidth, h = window.innerHeight;
-  const spot = nearestSpot(lodges, 55 * LODGE_SCALE, w, h) || nearestSpot(stations, 16 * STATION_SCALE, w, h);
+  const spot = (you.shown && nearestSpot([you.item], you.reach, w, h))
+    || nearestSpot(lodges, 55 * LODGE_SCALE, w, h) || nearestSpot(stations, 16 * STATION_SCALE, w, h);
   if (spot) return spot;
   const lift = runMap.nearestLift(mouse, camera, w, h, 9);
   if (lift) return lift;
@@ -342,7 +353,16 @@ const describeLodge = (l) => ({
   badge: 'lodge', zh: l.zh, en: l.en,
   rows: [[`${l.ele.toLocaleString()} m`, ''], ['Tickets · food · rental · first aid', '']],
 });
-const describe = (item) => (item.kind === 'lodge' ? describeLodge(item) : runMap.describe(item));
+// You: what you're on, and how high.
+function describeYou(y) {
+  const lift = y.lift && runMap.lifts.find((l) => String(l.lift.id) === y.lift);
+  const run = !lift && !y.outside && runMap.nearestRun(y.x, y.z, 22); // as the game's HUD counts it
+  const on = lift ? `${lift.zh} ↑` : run ? run.name || 'Unnamed run' : y.outside ? 'Off the table' : 'Off-piste';
+  const m = (v) => `${Math.round(v).toLocaleString()} m`;
+  return { badge: 'you', zh: '你在这里', en: 'You are here', rows: [[on, ''], [lift ? `up to ${m(lift.topY)}` : m(y.y), '']] };
+}
+const describe = (item) =>
+  item.kind === 'lodge' ? describeLodge(item) : item.kind === 'you' ? describeYou(item) : runMap.describe(item);
 
 function showTip(item) {
   runMap.setHot(item);
@@ -367,29 +387,51 @@ function placeTip() {
 
 // ---------- Navigation ----------
 // Clicking a place selects it; its card can frame it ("Look closer") or send
-// you into the game there.
+// you into the game there. Opened from the game in this tab, the "You" pin's
+// card goes back to it, just as you left it.
+const gamePage = new URL('./', location.href).pathname;
+const fromGame = (() => {
+  try {
+    const r = new URL(document.referrer);
+    return history.length > 1 && r.origin === location.origin && [gamePage, `${gamePage}index.html`].includes(r.pathname);
+  } catch {
+    return false;
+  }
+})();
 const nav = new Nav({
   hf, runs: meta.runs, runMap, lodges, stations, describe,
+  you: () => (you.shown ? you.item : null),
   onSelect: (item) => (item ? pauseSpin() : resumeSpinLater()),
   onLook: (item) => {
     const f = nav.focus(item);
     flyCamera(viewOf(f.point, frameDistance(f.size)), f.point);
   },
-  onGo: dive,
+  onGo: (key, item) => dive(item, () => location.assign(`./?at=${key}`), `Off to ${describe(item).zh}`),
+  onBack: fromGame ? (item) => dive(item, () => history.back(), 'Back to riding') : null,
 });
+// The game moved you (or forgot you): the card and highlights follow.
+function youMoved() {
+  if (nav.selected === you.item) {
+    if (you.shown) nav.refresh();
+    else nav.select(null);
+  }
+  runMap.setHot(null);
+  needsPick = true;
+}
 
 // Going: the camera dives at the spot while a cloud closes over the table, and
 // the game opens in that cloud (destinations.js has the ?at= keys). Coming back
 // with ?at= in the address, the table pulls out of the cloud the same way.
 const setCloud = createCloudWipe(document.getElementById('cloud'));
 let wipe = null;
-function dive(key, item) {
+// `go` leaves once the cloud has closed; `note` is for the game's loading screen.
+function dive(item, go, note) {
   if (wipe) return;
   const f = nav.focus(item, { dive: true });
   flyCamera(viewOf(f.point, 160, [0.7, 1.0]), f.point, { dur: 1.3, ease: (t) => t * t * (3 - 2 * t) });
   pauseSpin();
-  noteArrival(`Off to ${describe(item).zh}`);
-  wipe = { t: 0, dur: 1.3, cloud: (t) => THREE.MathUtils.smoothstep(t, 0.35, 1), done: () => location.assign(`./?at=${key}`) };
+  if (note) noteArrival(note);
+  wipe = { t: 0, dur: 1.3, cloud: (t) => THREE.MathUtils.smoothstep(t, 0.35, 1), done: go };
 }
 function emerge(item) {
   const f = nav.focus(item);
@@ -448,6 +490,7 @@ function frame() {
   runMap.setLineOpacity(THREE.MathUtils.clamp((camera.position.distanceTo(t) - 1500) / 5000, 0.18, 0.9));
   lifts.update(dt);
   skiers.update(dt, camera);
+  you.update(camera, time, window.innerWidth, window.innerHeight);
   forest.update(camera.position);
   sky.position.copy(camera.position);
   sky.material.uniforms.uTime.value = time;
@@ -459,8 +502,9 @@ function frame() {
   placeTip();
 
   post.render(scene, camera, time, hideForNormals);
+  you.drawOver(renderer, camera);
   requestAnimationFrame(frame);
 }
 
-window.__diorama = { scene, camera, controls, skiers, runMap, lifts, forest, renderer, nav, stations, lodges };
+window.__diorama = { scene, camera, controls, skiers, runMap, lifts, forest, renderer, nav, stations, lodges, you };
 requestAnimationFrame(frame);

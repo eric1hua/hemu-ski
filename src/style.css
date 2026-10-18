@@ -16,6 +16,10 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 }
 #loading .env { font-size: 54px; line-height: 1; }
 #loading.done { opacity: 0; pointer-events: none; }
+/* An open menu panel sits over the intro panel; the cloud and loading screen over everything. */
+#menu.open { z-index: 1; }
+#cloud { z-index: 2; }
+#loading { z-index: 3; }
 
 .hidden { display: none !important; }
 
@@ -57,7 +61,7 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
   box-shadow: 6px 6px 0 rgba(35, 48, 58, 0.35);
   padding: 30px 26px 22px; font-size: 21px; line-height: 1.35;
 }
-.panel .tab, #menu .tab {
+.panel .tab, #menu .tab, #bigmap .tab {
   position: absolute; top: -22px; left: -14px; padding: 4px 18px;
   background: var(--tab); color: #fff; border: 2.5px solid var(--ink);
   font-family: 'Patrick Hand SC', cursive; font-size: 22px; letter-spacing: 1px;
@@ -86,13 +90,14 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
   background: var(--paper); border: 2.5px solid var(--ink); padding: 4px 14px 4px 6px;
   box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35); font-size: 20px;
 }
-#hud .badge {
-  width: 22px; height: 22px; border: 2px solid var(--ink); display: inline-block;
+#hud .badge, #bigmap .badge {
+  width: 22px; height: 22px; border: 2px solid var(--ink); display: inline-block; flex: none;
 }
-#hud .badge.easy { background: #4f8fd6; border-radius: 50%; }
-#hud .badge.intermediate { background: #d9534a; transform: rotate(45deg) scale(0.85); }
-#hud .badge.advanced, #hud .badge.expert { background: #23303a; transform: rotate(45deg) scale(0.85); }
-#hud .badge.offpiste { background: #fbfaf5; border-style: dashed; border-radius: 50%; }
+:is(#hud, #bigmap) .badge.easy { background: #4f8fd6; border-radius: 50%; }
+:is(#hud, #bigmap) .badge.intermediate { background: #d9534a; transform: rotate(45deg) scale(0.85); }
+:is(#hud, #bigmap) .badge:is(.advanced, .expert) { background: #23303a; transform: rotate(45deg) scale(0.85); }
+:is(#hud, #bigmap) .badge.offpiste { background: #fbfaf5; border-style: dashed; border-radius: 50%; }
+:is(#hud, #bigmap) .badge.lift { background: var(--accent); border-radius: 4px; height: 16px; }
 
 #hud .stats {
   position: absolute; left: 18px; bottom: 18px; display: flex; gap: 10px;
@@ -105,11 +110,28 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 #hud .stats b { font-size: 30px; font-weight: normal; }
 #hud .stats small { font-size: 14px; margin-left: 3px; }
 
+/* The mini-map is a button: it opens the whole map. */
+#minimap-open {
+  position: absolute; right: 18px; top: 18px; padding: 0; border: 0; border-radius: 50%;
+  background: none; cursor: pointer; pointer-events: auto; transition: transform 0.12s;
+}
 #minimap {
-  position: absolute; right: 18px; top: 18px; width: 200px; height: 200px;
+  display: block; width: 200px; height: 200px;
   border: 2.5px solid var(--ink); background: var(--paper); border-radius: 50%;
   box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35);
 }
+#minimap-open:hover { transform: translateY(-2px); }
+#minimap-open:active { transform: translate(1px, 1px); }
+#minimap-open:focus-visible { outline: 3px solid var(--tab); outline-offset: 3px; }
+/* Name chip under it on hover, like the menu rail's. */
+#minimap-open::after {
+  content: attr(data-tip); position: absolute; left: 50%; top: calc(100% + 12px);
+  transform: translate(-50%, -6px); opacity: 0; pointer-events: none; transition: opacity 0.15s, transform 0.15s;
+  font-family: 'Patrick Hand SC', cursive; font-size: 18px; letter-spacing: 1px; white-space: nowrap; color: var(--ink);
+  background: var(--paper); border: 2.5px solid var(--ink); padding: 0 10px 2px;
+  box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
+#minimap-open:hover::after, #minimap-open:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
 #toast {
   position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
   font-family: 'Patrick Hand SC', cursive; font-size: 46px; color: #fff;
@@ -186,12 +208,86 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
   aspect-ratio: 1; display: grid; place-items: end center; padding-bottom: 3px;
   border: 2px dashed rgba(35, 48, 58, 0.4); font-size: 15px; color: rgba(35, 48, 58, 0.6);
 }
+/* Rider: one button each, the one you ride lit and ticked. */
+#menu .riders { display: grid; gap: 8px; margin: 0 0 12px; }
+#menu .riders button {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  font: inherit; font-size: 19px; color: var(--ink); cursor: pointer;
+  background: #fff; border: 2px solid var(--ink); padding: 2px 12px 4px; box-shadow: 2px 2px 0 var(--ink);
+}
+#menu .riders button[aria-pressed='true'] { background: var(--accent); }
+#menu .riders button[aria-pressed='true']::after { content: '✓'; margin-left: auto; }
+#menu .riders[aria-busy='true'] button[aria-pressed='true']::after { content: '…'; }
+#menu .riders button:hover { transform: translateY(-1px); }
+#menu .riders button:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+#menu .riders button:focus-visible { outline: 3px solid var(--tab); outline-offset: 2px; }
+#menu .keys { font-size: 16px; line-height: 1.6; }
+#menu kbd {
+  font-family: 'Patrick Hand SC', cursive; border: 2px solid var(--ink); border-radius: 4px;
+  padding: 0 5px; background: #fff;
+}
 /* Rubber stamp on the panels still to come. */
 #menu .soon {
   display: inline-block; margin: 0; padding: 0 10px 2px; transform: rotate(-4deg);
   font-family: 'Patrick Hand SC', cursive; font-size: 18px; letter-spacing: 2px;
   color: #d9534a; border: 2.5px solid currentColor;
 }
+
+/* The whole map, north up, with you on it. */
+#bigmap {
+  position: fixed; inset: 0; display: grid; place-items: center; padding: 30px 16px 16px;
+  background: rgba(35, 48, 58, 0.3);
+}
+#bigmap .sheet {
+  position: relative; background: var(--paper); border: 2.5px solid var(--ink);
+  box-shadow: 6px 6px 0 rgba(35, 48, 58, 0.35); padding: 26px 16px 14px;
+}
+#bigmap .x {
+  position: absolute; top: 2px; right: 6px; width: 30px; height: 26px; padding: 0;
+  font: inherit; font-size: 26px; line-height: 1; color: var(--ink); background: none; border: 0; cursor: pointer;
+}
+#bigmap .frame {
+  position: relative; overflow: hidden; aspect-ratio: 1;
+  width: min(640px, calc(100vw - 68px), calc(100vh - 190px));
+  border: 2px solid var(--ink); background: var(--paper);
+}
+#bigmap canvas { display: block; width: 100%; height: 100%; }
+/* Where you are: the mini-map's arrow, a pulsing ring, and a tag. */
+#bigmap .you { position: absolute; width: 0; height: 0; }
+#bigmap .you svg {
+  position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; overflow: visible;
+  fill: var(--accent); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round;
+  transform: rotate(var(--bearing, 0deg));
+}
+#bigmap .you i {
+  position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%;
+  border: 3px solid var(--ink); animation: you-ring 1.6s ease-out infinite;
+}
+@keyframes you-ring { from { transform: scale(0.35); opacity: 1; } to { transform: scale(1.3); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #bigmap .you i { animation: none; opacity: 0.45; } }
+#bigmap .you b {
+  position: absolute; left: 14px; bottom: 12px; font-weight: normal; white-space: nowrap;
+  font-family: 'Patrick Hand SC', cursive; font-size: 17px; letter-spacing: 1px; line-height: 1;
+  background: var(--accent); border: 2.5px solid var(--ink); padding: 2px 8px 4px;
+  box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
+#bigmap .you.flip-x b { left: auto; right: 14px; }
+#bigmap .you.flip-y b { bottom: auto; top: 12px; }
+#bigmap .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; }
+#bigmap .here { margin: 0; display: flex; align-items: center; gap: 10px; font-size: 21px; line-height: 1.1; }
+#bigmap .here .alt { font-size: 17px; opacity: 0.65; }
+#bigmap .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+#bigmap .acts button {
+  font: inherit; font-size: 18px; color: var(--ink); cursor: pointer;
+  background: #fff; border: 2px solid var(--ink); padding: 1px 12px 3px; box-shadow: 2px 2px 0 var(--ink);
+}
+#bigmap .acts button.go {
+  font-family: 'Patrick Hand SC', cursive; font-size: 20px; letter-spacing: 1px;
+  background: var(--accent); box-shadow: inset 0 -4px 0 #c99a2a, 2px 2px 0 var(--ink);
+}
+#bigmap .acts button:hover { transform: translateY(-1px); }
+#bigmap .acts button:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+#bigmap button:focus-visible { outline: 3px solid var(--tab); outline-offset: 2px; }
 
 @media (max-height: 520px) {
   #menu .rail { gap: 4px; padding: 5px; }
@@ -201,6 +297,7 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 
 @media (max-width: 640px) {
   #minimap { width: 120px; height: 120px; }
+  #bigmap .acts { margin-left: 0; }
   #hud .stats > div { min-width: 70px; padding: 2px 8px; }
   #hud .stats b { font-size: 22px; }
   .panel { font-size: 18px; }

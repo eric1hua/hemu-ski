@@ -43,6 +43,52 @@ export function runTop(hf, runs, id) {
   return best;
 }
 
+// Where you are in the game, for the diorama's "You" pin: game metres, a
+// compass bearing in degrees (0 north, 90 east) and, while you ride one, the
+// lift's OSM id. Pages carry it as ?you=<x>,<z>,<bearing>[,<lift>]; the game
+// also keeps it in localStorage, so a diorama open in another window follows you.
+const WHERE_KEY = 'hemu-ski.you';
+const WHERE_TTL = 10 * 60 * 1000; // older than this, a diorama opened later ignores it
+
+export function whereaboutsParam({ x, z, bearing, lift }) {
+  return [Math.round(x), Math.round(z), Math.round(bearing), ...(lift ? [lift] : [])].join(',');
+}
+
+export function parseWhereabouts(s) {
+  const [x, z, bearing, lift] = String(s ?? '').split(',');
+  if (![x, z].every((v) => v !== '' && Number.isFinite(+v))) return null;
+  return { x: +x, z: +z, bearing: +bearing || 0, lift: lift || null };
+}
+
+// null forgets it (a game page that hasn't put you on the mountain yet).
+export function saveWhereabouts(w) {
+  try {
+    if (w) localStorage.setItem(WHERE_KEY, JSON.stringify({ at: whereaboutsParam(w), t: Date.now() }));
+    else localStorage.removeItem(WHERE_KEY);
+  } catch {}
+}
+
+// The latest saved whereabouts, if recent; `onChange` gets each one the game
+// saves from then on (null when it forgets them).
+export function watchWhereabouts(onChange) {
+  const read = (raw, maxAge) => {
+    try {
+      const { at, t } = JSON.parse(raw);
+      return Date.now() - t < maxAge ? parseWhereabouts(at) : null;
+    } catch {
+      return null;
+    }
+  };
+  window.addEventListener('storage', (e) => {
+    if (e.key === WHERE_KEY) onChange(e.newValue ? read(e.newValue, Infinity) : null);
+  });
+  try {
+    return read(localStorage.getItem(WHERE_KEY), WHERE_TTL);
+  } catch {
+    return null;
+  }
+}
+
 // The page that is being opened passes a line for its loading screen through
 // here ("Off to 云霄峰道"), so the hand-off reads as one move.
 const NOTE_KEY = 'hemu-ski.arriving';

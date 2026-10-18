@@ -25,10 +25,18 @@ the sky as a small island behind block letters. **Begin** (or Enter) flies the
 camera down through a cloud to the top station; Space skips the flight, and
 `?notitle` in the URL skips the title altogether.
 
-A menu rail on the left edge links to the diorama and switches music and sound
-effects on and off; the game remembers those settings between visits. Its
-**Outfit & gear** and **Settings** panels are placeholders for now, and nothing
-plays on the music bus yet.
+Click the mini-map in the top right (or press **M**) for the whole map, north up,
+with an arrow where you are, the lifts by number and the service centres. The
+ride waits while it's open; Escape, M or **Back to riding** closes it. **See it on
+the diorama** opens the diorama on the same spot.
+
+A menu rail on the left edge links to the diorama, picks your rider (**Rider**:
+male, female or the classic one; the female rider can also walk and run off the
+board with F) and switches music and sound effects on and off. The game
+remembers your rider and those settings between visits, so you keep the same
+rider after a trip to the diorama; `?rider=male|female|classic` in the URL picks
+one too. Its **Outfit & gear** and **Settings** panels are placeholders for now,
+and nothing plays on the music bus yet.
 
 Or double-click `scripts/Hemu Ski.command` (a symlink to it on the Desktop works
 too). It starts the server on port 5190 and opens the game. Close the Terminal
@@ -60,6 +68,13 @@ It works on both pages: `/?at=run:1127891878` opens the game at the top of
 Yunxiaofeng. In the game, R takes you back to that spot. The menu's diorama
 button opens the diorama on it again, pulling back out of the cloud, and so does
 the browser's Back button.
+
+Opened from the game (the map's button or the menu), the diorama puts a yellow
+**You** pin where you are, on an arrow pointing the way you were heading. Hover or
+click it like any other place; opened from the game in the same tab, its card has
+**Back to riding**, which goes back to the game where you left off. With the game
+and the diorama open side by side in two windows, the pin follows you as you ride
+(the game saves where you are to `localStorage` a few times a second).
 
 It reuses the game's modules at toy proportions (oversized trees, lifts and
 riders). Its data is a separate, larger bake in `public/data/diorama/`, made
@@ -105,6 +120,7 @@ edits were saved.
 | Space | hold and release to ollie, steer in the air to spin |
 | E | board a lift at its bottom station or a service centre (Space skips the ride) |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
+| M | the whole map, with you on it (or click the mini-map) |
 
 ## How it's built
 

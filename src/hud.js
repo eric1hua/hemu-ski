@@ -18,6 +18,7 @@ export class Hud {
     this.map = $('minimap').getContext('2d');
     this.#prerenderMap();
     this.lastRun = null;
+    this.place = { name: '', badge: 'offpiste' };
   }
 
   #prerenderMap() {
@@ -89,6 +90,8 @@ export class Hud {
       const run = label ? null : this.world.meta.runs[ri];
       this.runName.textContent = label ?? (run ? run.name || 'Unnamed run' : 'Off-piste');
       this.badge.className = 'badge ' + (run ? run.difficulty : 'offpiste');
+      // Where you are, for the big map.
+      this.place = { name: this.runName.textContent, badge: label ? 'lift' : run ? run.difficulty : 'offpiste' };
     }
 
     // Minimap: north-up window centred on the rider.

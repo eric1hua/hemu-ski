@@ -10,10 +10,13 @@ import { Rider } from './player/rider.js';
 import { BoardPhysics } from './player/physics.js';
 import { Trail, Spray } from './player/fx.js';
 import { Hud } from './hud.js';
+import { BigMap } from './bigmap.js';
 import { Sound } from './audio.js';
 import { createMenu } from './menu.js';
 import { createIsland, createTitleLetters, createSnowSpecks, createCloudWipe } from './intro.js';
-import { destinationFromURL, destinationKey, runTop, noteArrival, takeArrivalNote } from './destinations.js';
+import {
+  destinationFromURL, destinationKey, runTop, noteArrival, takeArrivalNote, whereaboutsParam, saveWhereabouts,
+} from './destinations.js';
 import { liftTitle } from './diorama/names.js';
 
 const MAIN_RUN = '云霄峰道'; // Yunxiaofeng — the run under Gondola No. 6
@@ -127,9 +130,8 @@ cabin.visible = false;
 scene.add(cabin);
 
 // ---------- Player ----------
-// Choose a rider in Outfit & gear, or deep-link with ?rider=female/male/classic.
-const requestedRider = new URLSearchParams(location.search).get('rider');
-const initialRider = ['female', 'male', 'classic'].includes(requestedRider) ? requestedRider : 'male';
+// Choose a rider under Rider in the menu (see below), or deep-link with
+// ?rider=female/male/classic.
 const rider = new Rider({ model: false });
 scene.add(rider.root);
 const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)] });
@@ -138,12 +140,21 @@ const spray = new Spray();
 scene.add(trail.mesh, spray.points);
 const hud = new Hud(world, piste);
 const sound = new Sound();
-createMenu(sound);
+const menu = createMenu(sound);
+const bigMap = new BigMap({
+  hud, detail, runs: meta.runs, lifts: rides, onClose: closeMap,
+  onDiorama: () => leaveFor(dioramaHref('you'), 'Finding you on the diorama'),
+});
 
 const keys = new Set();
 const isControl = (target) => target instanceof Element
   && !!target.closest('input, select, textarea, button, a, [contenteditable="true"]');
 window.addEventListener('keydown', (e) => {
+  // The big map takes the keys while it's open; Escape or M closes it.
+  if (bigMap.isOpen) {
+    if ((e.code === 'Escape' || e.code === 'KeyM') && !e.repeat) closeMap();
+    return;
+  }
   if (isControl(e.target)) return;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
@@ -153,6 +164,7 @@ window.addEventListener('keydown', (e) => {
   if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
   if (e.code === 'KeyR' && state === 'ride') startRun();
   if (e.code === 'KeyF' && !e.repeat && state === 'ride') toggleLocomotion();
+  if (e.code === 'KeyM' && !e.repeat) openMap();
   if (e.code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((e.code === 'KeyE' || e.code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
   if ((e.code === 'Enter' || e.code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
@@ -190,7 +202,7 @@ function toggleLocomotion() {
     return;
   }
   if (!rider.setLocomotion('walk')) {
-    hud.toast('Choose a rider with walking animations in Outfit & gear');
+    hud.toast('Choose a rider who can walk under Rider in the menu');
     return;
   }
   phys.vel.set(0, 0, 0);
@@ -199,14 +211,24 @@ function toggleLocomotion() {
   hud.toast('On foot · W walk · Shift run · F board');
 }
 
-const riderSelect = document.getElementById('rider-select');
+// ---------- Rider ----------
+// The menu's Rider panel has a button per rider. The game remembers the one you
+// ride (with the music and sound settings), so it's the same rider after a trip
+// to the diorama, a reload or the map editor's Ride button; ?rider= picks one too.
+const RIDERS = ['male', 'female', 'classic'];
+const riderGroup = document.querySelector('#fly-rider .riders');
+const riderButtons = [...riderGroup.querySelectorAll('[data-rider]')];
 const riderStatus = document.getElementById('rider-status');
-let riderSelection = 0;
+const showRider = (id) => {
+  for (const b of riderButtons) b.setAttribute('aria-pressed', String(b.dataset.rider === id));
+};
+let riderSelection = 0, riderWanted = null;
 async function chooseRider(id) {
   const selection = ++riderSelection;
+  riderWanted = id;
   restoreRide();
-  riderSelect.value = id;
-  riderSelect.setAttribute('aria-busy', 'true');
+  showRider(id);
+  riderGroup.setAttribute('aria-busy', 'true');
   riderStatus.textContent = 'Loading rider…';
   let loaded = false;
   try { loaded = await rider.selectModel(id); }
@@ -214,14 +236,23 @@ async function chooseRider(id) {
   if (selection !== riderSelection) return;
   // A failed load keeps the effective rider selected; an older request cannot
   // overwrite the status of the latest choice.
-  riderSelect.value = rider.modelId;
-  riderSelect.removeAttribute('aria-busy');
+  riderWanted = rider.modelId;
+  showRider(rider.modelId);
+  riderGroup.removeAttribute('aria-busy');
+  if (loaded && menu.prefs.rider !== rider.modelId) {
+    menu.prefs.rider = rider.modelId;
+    menu.save();
+  }
   riderStatus.textContent = loaded
     ? (rider.model?.canWalk ? 'Ready · F switches board / on foot' : 'Ready · snowboarding')
     : 'Could not load that rider. Previous rider kept; choose again to retry.';
 }
-riderSelect.addEventListener('change', () => { void chooseRider(riderSelect.value); });
-void chooseRider(initialRider);
+for (const b of riderButtons)
+  b.addEventListener('click', () => {
+    if (b.dataset.rider !== riderWanted) void chooseRider(b.dataset.rider);
+  });
+const riderParam = new URLSearchParams(location.search).get('rider');
+void chooseRider([riderParam, menu.prefs.rider].find((id) => RIDERS.includes(id)) ?? 'male');
 
 // ---------- Panels ----------
 const panel = document.getElementById('panel');
@@ -242,17 +273,18 @@ let state = 'title'; // title → swoop → intro → ride ⇄ lift, or arrive �
 let elapsed = 0, timing = false, falls = 0;
 let camDir = new THREE.Vector3(startAt.dx, 0, startAt.dz);
 
-function startRun() {
+// From your spawn, or from `at` ({ x, z, dx, dz, toast }) coming back to where you left off.
+function startRun(at = spawn) {
   restoreRide();
-  phys.reset(spawn.x, spawn.z, yawOf(spawn.dx, spawn.dz));
+  phys.reset(at.x, at.z, yawOf(at.dx, at.dz));
   trail.clear();
   elapsed = 0; timing = false; falls = 0;
   rider.pose.tumble = 0;
-  camDir.set(spawn.dx, 0, spawn.dz);
+  camDir.set(at.dx, 0, at.dz);
   snapCamera();
   state = 'ride';
   hud.show(true);
-  hud.toast(spawn.toast, 2000);
+  hud.toast(at.toast, 2000);
 }
 
 phys.reset(startAt.x, startAt.z, yawOf(startAt.dx, startAt.dz));
@@ -267,7 +299,7 @@ const introPanel = () => showPanel('Hemu · 禾木', `
     <span><kbd>S</kbd></span><span>skid to scrub speed</span>
     <span><kbd>Space</kbd></span><span>hold and release to ollie · spin in the air</span>
     <span><kbd>E</kbd></span><span>board a lift at its station</span>
-    <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose in Outfit &amp; gear</span>
+    <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose under Rider</span>
     <span><kbd>W</kbd><kbd>Shift</kbd></span><span>walk / run on foot · A/D turn · S stop</span>
     <span><kbd>R</kbd></span><span>back to the top</span>
   </div>
@@ -497,7 +529,9 @@ function frame() {
   time += dt;
   readInput();
 
-  if (state === 'ride') {
+  if (bigMap.isOpen) {
+    sound.update(0, 0, false); // the ride holds still under the map
+  } else if (state === 'ride') {
     acc += dt;
     while (acc >= STEP) {
       if (rider.locomotion === 'walk') phys.stepWalk(STEP, input);
@@ -543,6 +577,10 @@ function frame() {
     else if (state === 'swoop') updateSwoop(dt);
     else if (state === 'arrive') updateArrival(dt);
     sound.update(0, 0, false);
+  }
+  if ((state === 'ride' || state === 'lift') && (whereT -= dt) <= 0) {
+    whereT = 0.25;
+    saveWhereabouts(whereabouts());
   }
   if (leaving) updateLeaving(dt);
   letters.update(dt, time, camera, titleDist * 0.45, pointer);
@@ -759,9 +797,10 @@ function liftEnds(lift) {
 // From the diorama the page opens inside the cloud the diorama dived into. The
 // camera drops out of it, from high over the spot to just behind the rider,
 // and you're off (or, for "Board and ride up", straight onto the lift).
-// Space, Enter or Escape skips the drop.
+// Space, Enter or Escape skips the drop. `dest` becomes your spawn; coming back
+// to where you left off, you drop at `at` instead.
 let arrival = null;
-function arrive(dest) {
+function arrive(dest, at = dest) {
   restoreRide();
   spawn = dest;
   linkDiorama();
@@ -772,14 +811,14 @@ function arrive(dest) {
   titleEl.classList.add('hidden');
   panel.classList.add('hidden'); // ?notitle opens on the intro panel
   panelNext = null;
-  phys.reset(spawn.x, spawn.z, yawOf(spawn.dx, spawn.dz));
-  camDir.set(spawn.dx, 0, spawn.dz);
+  phys.reset(at.x, at.z, yawOf(at.dx, at.dz));
+  camDir.set(at.dx, 0, at.dz);
   const end = new THREE.Vector3(), look = new THREE.Vector3();
   cameraTarget(end, look);
   const from = end.clone().addScaledVector(camDir, -260);
   from.y += 380;
   // A beat in the cloud first while the loading screen fades.
-  arrival = { t: -0.25, dur: 2.8, end, look, from };
+  arrival = { t: -0.25, dur: 2.8, end, look, from, at };
   setCloud(1);
   updateArrival(0);
 }
@@ -800,47 +839,120 @@ function updateArrival(dt) {
   setCloud(0);
   setLens(60, 6);
   arrival = null;
-  startRun();
-  if (spawn.board) board(spawn.board);
+  startRun(A.at);
+  if (A.at === spawn && spawn.board) board(spawn.board);
+}
+
+// ---------- Whereabouts ----------
+// Where you are, for the big map and the diorama's "You" pin (see
+// destinations.js). Saved a few times a second while you ride, so a diorama
+// open in another window follows you; a fresh page clears the last one.
+const _fw = new THREE.Vector3();
+let whereT = 0;
+saveWhereabouts(null);
+function whereabouts() {
+  const ride = state === 'lift' ? liftRide.ride : null;
+  const f = ride ? ride.dir : phys.forward(_fw);
+  const bearing = THREE.MathUtils.euclideanModulo(THREE.MathUtils.radToDeg(Math.atan2(f.x, -f.z)), 360);
+  return { x: phys.pos.x, z: phys.pos.z, bearing, lift: ride?.id ?? null };
+}
+
+// ---------- Big map ----------
+// Click the mini-map (or press M) while riding: the whole map, with you on it.
+const minimapBtn = document.getElementById('minimap-open');
+minimapBtn.addEventListener('mousedown', (e) => e.preventDefault()); // keep Space for the ollie
+minimapBtn.addEventListener('click', () => openMap());
+function openMap() {
+  if (bigMap.isOpen || leaving || (state !== 'ride' && state !== 'lift')) return;
+  const at = whereabouts();
+  bigMap.open(at, hud.place, phys.pos.y);
+  minimapBtn.setAttribute('aria-expanded', 'true');
+  saveWhereabouts(at);
+}
+function closeMap() {
+  bigMap.close();
+  minimapBtn.setAttribute('aria-expanded', 'false');
 }
 
 // ---------- Back to the diorama ----------
 // The menu's diorama button opens it on your spawn, after the cloud closes
-// over the slope the way the diorama's own dive does.
+// over the slope the way the diorama's own dive does; the big map's opens it
+// on you. Either way the diorama puts its "You" pin where you are.
 const dioramaLink = document.querySelector('#menu a.go');
-function linkDiorama() {
-  dioramaLink.href = `./diorama.html?at=${spawn.key}`;
+function dioramaHref(at = spawn.key) {
+  const placed = state !== 'title' && state !== 'swoop'; // not on the mountain yet
+  return `./diorama.html?at=${at}${placed ? `&you=${whereaboutsParam(whereabouts())}` : ''}`;
 }
+function linkDiorama() {
+  dioramaLink.href = dioramaHref();
+}
+// A new tab or window opens straight from the link, so it's kept current.
+dioramaLink.addEventListener('pointerdown', linkDiorama);
+dioramaLink.addEventListener('focus', linkDiorama);
 let leaving = null;
 dioramaLink.addEventListener('click', (e) => {
   if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // a new tab or window
   e.preventDefault();
-  if (leaving) return;
-  noteArrival('Back to the diorama');
-  leaving = { t: 0, href: dioramaLink.href };
+  leaveFor(dioramaHref(), 'Back to the diorama');
 });
+function leaveFor(href, note) {
+  if (leaving) return;
+  noteArrival(note);
+  keepResume();
+  leaving = { t: 0, href };
+}
 function updateLeaving(dt) {
   leaving.t = Math.min(1, leaving.t + dt / 0.7);
   setCloud(THREE.MathUtils.smoothstep(leaving.t, 0, 1));
   if (leaving.t >= 1) {
+    closeMap(); // back from the diorama, you ride on
     location.assign(leaving.href);
     leaving = null;
   }
 }
-// Back here with the page kept as it was: it's still in the cloud.
+// Back here with the page kept as it was: it's still in the cloud, and you ride
+// on from where you were.
 window.addEventListener('pageshow', (e) => {
-  if (e.persisted) setCloud(0);
+  if (!e.persisted) return;
+  setCloud(0);
+  takeResume();
+  takeArrivalNote();
 });
+
+// If the browser reloads the page instead (Back, or the diorama's "Back to
+// riding"), it drops you where you left off: on the snow where you were, or
+// at the top if you were riding a lift up. Your spawn stays as it was.
+const RESUME_KEY = 'hemu-ski.resume';
+function keepResume() {
+  try {
+    if (state === 'ride' || state === 'lift') sessionStorage.setItem(RESUME_KEY, JSON.stringify(whereabouts()));
+    else sessionStorage.removeItem(RESUME_KEY); // from the title, Back is the title again
+  } catch {}
+}
+function takeResume() {
+  try {
+    const w = JSON.parse(sessionStorage.getItem(RESUME_KEY));
+    sessionStorage.removeItem(RESUME_KEY);
+    return w && performance.getEntriesByType('navigation')[0]?.type === 'back_forward' ? w : null;
+  } catch {
+    return null;
+  }
+}
+function resumeSpot(w) {
+  if (w.lift) return resolveDestination({ kind: 'lift', id: String(w.lift), end: 'top' });
+  const b = THREE.MathUtils.degToRad(w.bearing);
+  return detail.inside(w.x, w.z) ? { x: w.x, z: w.z, dx: Math.sin(b), dz: -Math.cos(b), toast: 'Back on the snow' } : null;
+}
 
 linkDiorama();
 const asked = destinationFromURL();
-if (asked) {
-  const dest = resolveDestination(asked);
-  if (dest) arrive(dest);
-  else console.warn(`No ${asked.kind} ${asked.id} on this map; starting at the top.`);
-}
+const askedDest = asked && resolveDestination(asked);
+if (asked && !askedDest) console.warn(`No ${asked.kind} ${asked.id} on this map; starting at the top.`);
+const back = takeResume();
+const backAt = back && resumeSpot(back);
+if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

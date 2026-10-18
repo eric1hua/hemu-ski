@@ -1,19 +1,21 @@
 // Point-and-click navigation on the diorama. Clicking a run, a lift, one of its
 // stations or a service centre selects it: it stays highlighted and a card
 // offers to send you there in the game, as a destination key (destinations.js).
+// The "You" pin (you.js) is picked the same way; its card can take you back.
 // The selection is also kept in this page's address (?at=<key>), so coming back
 // from the game, by Back or by the game's own menu, finds it again.
 import * as THREE from 'three';
 import { parseDestination, runTop } from '../destinations.js';
 
-const TABS = { run: 'Run', lift: 'Lift', station: 'Lift station', lodge: 'Service centre' };
+const TABS = { run: 'Run', lift: 'Lift', station: 'Lift station', lodge: 'Service centre', you: 'You' };
 const m = (v) => `${Math.round(v).toLocaleString()} m`;
 
 export class Nav {
   // `describe(item)` gives the tooltip's text; `onLook(item)` frames it;
-  // `onGo(key, item)` sends you into the game.
-  constructor({ hf, runs, runMap, lodges, stations, describe, onSelect, onLook, onGo }) {
-    Object.assign(this, { hf, runs, runMap, lodges, stations, describe, onSelect, onLook, onGo });
+  // `onGo(key, item)` sends you into the game; `onBack(item)`, if given, back
+  // to where you were in it. `you()` is the "You" pin's item, or null.
+  constructor({ hf, runs, runMap, lodges, stations, you, describe, onSelect, onLook, onGo, onBack }) {
+    Object.assign(this, { hf, runs, runMap, lodges, stations, you, describe, onSelect, onLook, onGo, onBack });
     this.selected = null;
     this.actions = [];
     this.el = document.getElementById('pick');
@@ -42,8 +44,18 @@ export class Nav {
     this.el.classList.toggle('hidden', !item);
     document.body.classList.toggle('picking', !!item);
     this.onSelect?.(item);
-    if (!item) return;
+    if (item) this.#fill(item);
+  }
 
+  // The selection moved (the "You" pin follows you): paint and describe it again.
+  refresh() {
+    if (!this.selected) return;
+    this.runMap.setPicked(null);
+    this.runMap.setPicked(this.selected);
+    this.#fill(this.selected);
+  }
+
+  #fill(item) {
     const d = this.describe(item);
     const { what, acts } = this.#offers(item);
     this.actions = acts;
@@ -56,7 +68,7 @@ export class Nav {
     $('.rows').innerHTML = d.rows.map(([v, k]) => `<span><b>${v}</b>${k ? ` ${k}` : ''}</span>`).join('');
     $('.what').textContent = what;
     this.acts.innerHTML = acts
-      .map((a, i) => `<button type="button" data-i="${i}" class="${i === 0 ? 'go' : a.look ? 'look' : ''}">${a.label}${a.key ? ' ▸' : ''}</button>`)
+      .map((a, i) => `<button type="button" data-i="${i}" class="${i === 0 ? 'go' : a.look ? 'look' : ''}">${a.label}${a.key || a.back ? ' ▸' : ''}</button>`)
       .join('');
   }
 
@@ -72,6 +84,11 @@ export class Nav {
           acts: [{ label: 'Ride it from the top', key: `run:${top.run.id}` }, look],
         };
       }
+      case 'you':
+        return {
+          what: item.outside ? 'You’re past the edge of the table, out this way.' : 'Where you are in the game.',
+          acts: [...(this.onBack ? [{ label: 'Back to riding', back: true }] : []), look],
+        };
       case 'lodge':
         return {
           what: `Tickets, food and rentals. Board ${item.lift} from the hall, or ride off from the door.`,
@@ -104,12 +121,14 @@ export class Nav {
   #act(a) {
     if (!a) return;
     if (a.look) this.onLook(this.selected);
+    else if (a.back) this.onBack(this.selected);
     else this.onGo(a.key, this.itemOf(a.key) ?? this.selected);
   }
 
   // The selection's own key: for a lift (its cable) that's `lift:<id>`, which
   // the game reads as its bottom station.
   keyOf(item) {
+    if (item.kind === 'you') return 'you';
     if (item.kind === 'run') return `run:${runTop(this.hf, this.runs, item.runs[0].id).run.id}`;
     if (item.kind === 'lodge') return `lodge:${item.id}`;
     if (item.kind === 'station') return `lift:${item.lift.lift.id}:${item.end}`;
@@ -117,6 +136,7 @@ export class Nav {
   }
 
   itemOf(key) {
+    if (key === 'you') return this.you();
     const d = parseDestination(key);
     if (!d) return null;
     if (d.kind === 'run') return this.runMap.groups.find((g) => g.runs.some((r) => String(r.id) === d.id)) ?? null;
@@ -159,7 +179,7 @@ export class Nav {
     const url = new URL(location.href);
     if (this.selected) url.searchParams.set('at', this.keyOf(this.selected));
     else url.searchParams.delete('at');
-    url.search = url.searchParams.toString().replaceAll('%3A', ':');
+    url.search = url.searchParams.toString().replaceAll('%3A', ':').replaceAll('%2C', ',');
     history.replaceState(history.state, '', url);
   }
 }
