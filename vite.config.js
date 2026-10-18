@@ -60,6 +60,8 @@ function mapEditorSaves() {
 // Two pages: the snowboarding game and the tabletop diorama. The map editor
 // (editor.html) is a dev-only page and stays out of the build.
 export default defineConfig({
+  // Relative URLs, so the build works under any sub-path (GitHub Pages serves it at /hemu-ski/).
+  base: './',
   plugins: [mapEditorSaves()],
   // Saving from the editor shouldn't reload the open pages.
   server: { watch: { ignored: ['**/public/data/edits/**'] } },
