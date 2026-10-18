@@ -71,11 +71,15 @@
 
       <section class="flyout hidden" id="fly-outfit" aria-label="Outfit &amp; gear">
         <div class="tab">Outfit &amp; gear</div>
-        <ul class="slots">
-          <li>Helmet</li><li>Goggles</li><li>Jacket</li>
-          <li>Gloves</li><li>Pants</li><li>Board</li>
-        </ul>
-        <p class="soon">Coming soon</p>
+        <p><label for="rider-select">Rider</label><br>
+          <select id="rider-select" aria-describedby="rider-status" style="width:100%;font:inherit;color:inherit;background:var(--paper);border:2px solid var(--ink);padding:6px">
+            <option value="male">Male rider</option>
+            <option value="female">Female rider</option>
+            <option value="classic">Classic rider</option>
+          </select>
+        </p>
+        <p id="rider-status" role="status" aria-live="polite">Loading rider…</p>
+        <p><kbd>F</kbd> switch board / on foot<br><kbd>W</kbd> walk · <kbd>Shift</kbd> run<br><kbd>A</kbd> / <kbd>D</kbd> turn · <kbd>S</kbd> stop</p>
       </section>
       <section class="flyout hidden" id="fly-settings" aria-label="Settings">
         <div class="tab">Settings</div>

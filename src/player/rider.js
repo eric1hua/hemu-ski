@@ -127,9 +127,11 @@ export class Rider {
     this.edge = new THREE.Group(); // rolls onto toe/heel edge
     this.root.add(this.edge);
 
-    this.board = mesh(boardGeometry(), M.board, this.edge, 0, 0.0, 0);
+    this.proceduralBoard = new THREE.Group();
+    this.edge.add(this.proceduralBoard);
+    this.board = mesh(boardGeometry(), M.board, this.proceduralBoard, 0, 0.0, 0);
     this.board.receiveShadow = true;
-    const base = mesh(new THREE.BoxGeometry(0.24, 0.006, 1.0), M.boardBase, this.edge, 0, -0.002, 0);
+    const base = mesh(new THREE.BoxGeometry(0.24, 0.006, 1.0), M.boardBase, this.proceduralBoard, 0, -0.002, 0);
     base.castShadow = false;
 
     // The character faces +z in its own frame; turned 90° so the chest faces
@@ -139,25 +141,61 @@ export class Rider {
     this.edge.add(this.body);
     this.classic = new THREE.Group(); // the primitive character, minus the bindings
     this.body.add(this.classic);
+    this.bindings = [];
     this.boots = []; // primitive boots and straps, hidden when the model boots stand in them
     this.#buildCharacter();
 
     this.pose = { crouch: 0.4, lean: 0, twist: 0, armSwing: 0, air: 0, tumble: 0 };
     this.t = 0;
     this.model = null;
-    if (model) {
-      // Loaded on demand so pages with only classic riders (the diorama) skip the loader code.
-      import('./rider-model.js')
-        .then(async ({ loadRiderModel, RiderModel }) => this.#useModel(new RiderModel(await loadRiderModel())))
-        .catch((err) => console.warn('Rider model unavailable; keeping the classic rider.', err));
-    }
+    this.modelId = 'classic';
+    this.locomotion = 'ride';
+    this.models = new Map();
+    this.selection = 0;
+    if (model) this.selectModel(model === true ? 'male' : model).catch((err) => console.warn('Rider model unavailable.', err));
   }
 
-  #useModel(model) {
+  async selectModel(id) {
+    const selection = ++this.selection;
+    let model = null;
+    if (id !== 'classic') {
+      if (!this.models.has(id)) {
+        this.models.set(id, import('./rider-model.js')
+          .then(async ({ loadRiderModel, RiderModel }) => new RiderModel(await loadRiderModel(id), id))
+          .catch((err) => { this.models.delete(id); throw err; }));
+      }
+      model = await this.models.get(id);
+      if (id === 'female' && !this.boardAssembly) {
+        this.boardLoading ||= import('./rider-board.js').then(({ loadBoardAssembly }) => loadBoardAssembly(this))
+          .catch((err) => { this.boardLoading = null; throw err; });
+        this.boardAssembly = await this.boardLoading;
+      }
+    }
+    if (selection !== this.selection) return false;
+    this.setLocomotion('ride');
+    if (this.model) this.body.remove(this.model.root);
     this.model = model;
-    this.body.add(this.model.root);
-    this.classic.visible = false;
-    for (const m of this.boots) m.visible = false;
+    this.modelId = id;
+    if (model) this.body.add(model.root);
+    this.classic.visible = !model;
+    for (const m of this.boots) m.visible = !model;
+    this.#gearVisibility();
+    return true;
+  }
+
+  setLocomotion(mode) {
+    if (mode === 'walk' && !this.model?.canWalk) return false;
+    this.locomotion = mode;
+    this.#gearVisibility();
+    return true;
+  }
+
+  #gearVisibility() {
+    const riding = this.locomotion === 'ride';
+    this.proceduralBoard.visible = riding && this.modelId !== 'female';
+    if (this.boardAssembly) this.boardAssembly.visible = riding && this.modelId === 'female';
+    for (const binding of this.bindings) binding.visible = riding && this.modelId !== 'female';
+    for (const boot of this.boots) boot.visible = !this.model && riding;
   }
 
   #buildCharacter() {
@@ -173,8 +211,8 @@ export class Rider {
         mesh(new THREE.BoxGeometry(0.19, 0.05, 0.12), M.orange, foot, 0, 0.15, 0.05), // ankle strap
         mesh(new THREE.BoxGeometry(0.19, 0.04, 0.07), M.orange, foot, 0, 0.12, 0.15), // toe strap
       );
-      mesh(new THREE.BoxGeometry(0.18, 0.035, 0.35), M.orange, foot, 0, 0.015, 0.02); // sole
-      mesh(new THREE.BoxGeometry(0.18, 0.26, 0.05), M.orange, foot, 0, 0.17, -0.16); // highback
+      this.bindings.push(mesh(new THREE.BoxGeometry(0.18, 0.035, 0.35), M.orange, foot, 0, 0.015, 0.02)); // sole
+      this.bindings.push(mesh(new THREE.BoxGeometry(0.18, 0.26, 0.05), M.orange, foot, 0, 0.17, -0.16)); // highback
       return foot;
     });
 
@@ -345,6 +383,10 @@ export class Rider {
     // Crash tumble.
     this.body.rotation.x = p.tumble;
 
-    this.model?.apply(this);
+    const walking = this.locomotion === 'walk';
+    const targetYaw = walking ? Math.PI : Math.PI / 2;
+    this.body.rotation.y += (targetYaw - this.body.rotation.y) * Math.min(1, dt / 0.08);
+    if (walking) { this.edge.rotation.z = 0; this.body.rotation.x = 0; }
+    this.model?.update(dt, this, this.locomotion, s.speed || 0);
   }
 }

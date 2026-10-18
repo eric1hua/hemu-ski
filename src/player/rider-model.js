@@ -1,23 +1,27 @@
-// The Tripo-generated player (public/models/player.glb): a Mixamo-rigged, T-posed
-// mesh that the Rider poses every frame. It doesn't carry its own animation —
-// it copies the angles the classic primitive rider already works out (hips,
-// torso, head, arms) onto the matching bones, then bends each leg with
-// two-bone IK so the boots stay planted in the bindings.
-//
-// Space: the model sits in the Rider's body frame, which matches the GLB's own
-// (faces +z, character's left on +x), so rotations carry over unchanged.
+// Selectable Mixamo riders. Riding copies the classic pose and solves leg IK;
+// on-foot movement plays the authored walk/run clips without procedural posing.
+// Model and body coordinates: +Z facing, character left +X.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
 
-const URL = import.meta.env.BASE_URL + 'models/player.glb';
-const HEIGHT = 1.7; // T-pose height; puts the hips where the classic rider's are
-const BOARD_TOP = 0.025; // boot soles rest on the board deck
-
-let loading = null;
-export function loadRiderModel() {
-  return (loading ||= new GLTFLoader().loadAsync(URL));
+export const RIDER_MODELS = {
+  male: { file: 'player.glb', height: 1.7 },
+  // Includes the cat ears: keep her body scale independent of the male's hat.
+  female: { file: 'female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb', height: 1.8 },
+};
+const BOARD_TOP = 0.025;
+const FADE = 0.25;
+const loading = new Map();
+export function loadRiderModel(id = 'male') {
+  const spec = RIDER_MODELS[id];
+  if (!spec) throw new Error(`Unknown rider: ${id}`);
+  if (!loading.has(id)) {
+    loading.set(id, new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/' + spec.file)
+      .catch((err) => { loading.delete(id); throw err; }));
+  }
+  return loading.get(id);
 }
 
 // Bones driven each frame. The clavicles (Shoulder) and Spine2 stay at the bind
@@ -31,13 +35,12 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _a = new THREE.Vector3
 const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _e = new THREE.Euler();
 
 export class RiderModel {
-  constructor(gltf) {
+  constructor(gltf, id = 'male') {
     const scene = clone(gltf.scene);
     scene.traverse((o) => {
       if (!o.isMesh) return;
       const src = o.material;
       o.material = makeToon({ map: src.map, color: src.color, side: src.side }, { rim: 1, hatch: 0 });
-      src.dispose();
       o.castShadow = true;
       o.frustumCulled = false; // bind-pose bounds don't follow the crouch
     });
@@ -46,7 +49,7 @@ export class RiderModel {
     this.root.name = 'RiderModel';
     this.root.add(scene);
     const box = new THREE.Box3().setFromObject(scene);
-    this.scale = HEIGHT / (box.max.y - box.min.y);
+    this.scale = RIDER_MODELS[id].height / (box.max.y - box.min.y);
     this.root.scale.setScalar(this.scale);
     this.root.position.y = BOARD_TOP - box.min.y * this.scale;
     this.root.updateMatrixWorld(true);
@@ -54,6 +57,25 @@ export class RiderModel {
     // Per bone: bind local pose, and the parent's bind orientation in model
     // space (so a model-space rotation can be applied relative to the parent).
     this.bones = {};
+    this.rest = [];
+    scene.traverse((bone) => {
+      if (bone.isBone) this.rest.push({ bone, p: bone.position.clone(), q: bone.quaternion.clone(), s: bone.scale.clone() });
+    });
+    // Keep mixer targets separate: PropertyMixer caches unchanged track values.
+    // Fading on its target bones would leave a frozen clip stuck halfway.
+    this.animationScene = clone(gltf.scene);
+    for (const entry of this.rest) entry.animated = this.animationScene.getObjectByName(entry.bone.name);
+    this.mixer = new THREE.AnimationMixer(this.animationScene);
+    this.walk = gltf.animations.find((clip) => clip.name === 'walk.001');
+    this.run = gltf.animations.find((clip) => clip.name === 'run.001');
+    this.canWalk = !!(this.walk && this.run);
+    if (this.canWalk) {
+      this.walk = this.mixer.clipAction(this.walk).play();
+      this.run = this.mixer.clipAction(this.run).play();
+    }
+    this.mode = 'ride';
+    this.fade = FADE;
+    this.transition = null;
     const rootQinv = this.root.getWorldQuaternion(new THREE.Quaternion()).invert();
     scene.traverse((o) => {
       if (!o.isBone) return;
@@ -81,6 +103,45 @@ export class RiderModel {
       Left: [pos('LeftForeArm').sub(pos('LeftArm')).normalize(), childDir(this.bones.LeftForeArm.bone, this.root)],
       Right: [pos('RightForeArm').sub(pos('RightArm')).normalize(), childDir(this.bones.RightForeArm.bone, this.root)],
     };
+  }
+
+  update(dt, rider, mode, speed) {
+    if (mode !== this.mode) {
+      this.transition = this.rest.map(({ bone }) => ({ p: bone.position.clone(), q: bone.quaternion.clone(), s: bone.scale.clone() }));
+      this.fade = 0;
+      this.mode = mode;
+    }
+    if (mode === 'walk' && this.canWalk) {
+      const blend = THREE.MathUtils.smoothstep(speed, 1.5, 4);
+      this.walk.setEffectiveWeight(1 - blend);
+      this.run.setEffectiveWeight(blend);
+      // Hold the current walk frame when stopped; the asset has no idle clip.
+      this.walk.setEffectiveTimeScale(speed < 0.05 ? 0 : THREE.MathUtils.clamp(speed / 1.4, 0.25, 1.5));
+      this.run.setEffectiveTimeScale(speed < 0.05 ? 0 : THREE.MathUtils.clamp(speed / 4, 0.25, 1.5));
+      this.mixer.update(dt);
+      for (const { bone, animated } of this.rest) {
+        bone.position.copy(animated.position);
+        bone.quaternion.copy(animated.quaternion);
+        bone.scale.copy(animated.scale);
+      }
+    } else {
+      // Clips animate all 65 bones; restore all of them before procedural posing.
+      for (const { bone, p, q, s } of this.rest) {
+        bone.position.copy(p); bone.quaternion.copy(q); bone.scale.copy(s);
+      }
+      this.apply(rider);
+    }
+    this.fade = Math.min(FADE, this.fade + dt);
+    if (this.transition) {
+      const t = THREE.MathUtils.smoothstep(this.fade, 0, FADE);
+      this.rest.forEach(({ bone }, i) => {
+        const from = this.transition[i];
+        bone.position.lerpVectors(from.p, bone.position, t);
+        bone.quaternion.slerpQuaternions(from.q, bone.quaternion, t);
+        bone.scale.lerpVectors(from.s, bone.scale, t);
+      });
+      if (this.fade === FADE) this.transition = null;
+    }
   }
 
   // Rotate a bone by `d` (a model-space rotation) relative to its parent.

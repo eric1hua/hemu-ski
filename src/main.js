@@ -127,8 +127,10 @@ cabin.visible = false;
 scene.add(cabin);
 
 // ---------- Player ----------
-// ?rider=classic keeps the primitive rider instead of the Tripo model.
-const rider = new Rider({ model: new URLSearchParams(location.search).get('rider') !== 'classic' });
+// Choose a rider in Outfit & gear, or deep-link with ?rider=female/male/classic.
+const requestedRider = new URLSearchParams(location.search).get('rider');
+const initialRider = ['female', 'male', 'classic'].includes(requestedRider) ? requestedRider : 'male';
+const rider = new Rider({ model: false });
 scene.add(rider.root);
 const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)] });
 const trail = new Trail();
@@ -139,7 +141,10 @@ const sound = new Sound();
 createMenu(sound);
 
 const keys = new Set();
+const isControl = (target) => target instanceof Element
+  && !!target.closest('input, select, textarea, button, a, [contenteditable="true"]');
 window.addEventListener('keydown', (e) => {
+  if (isControl(e.target)) return;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   sound.start();
@@ -147,13 +152,15 @@ window.addEventListener('keydown', (e) => {
   if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
   if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
   if (e.code === 'KeyR' && state === 'ride') startRun();
+  if (e.code === 'KeyF' && !e.repeat && state === 'ride') toggleLocomotion();
   if (e.code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((e.code === 'KeyE' || e.code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
   if ((e.code === 'Enter' || e.code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
-const input = { steer: 0, tuck: false, brake: false, jump: false };
+window.addEventListener('focusin', (e) => { if (isControl(e.target)) keys.clear(); });
+const input = { steer: 0, tuck: false, brake: false, jump: false, walk: false, run: false };
 function readInput() {
   const L = keys.has('KeyA') || keys.has('ArrowLeft');
   const R = keys.has('KeyD') || keys.has('ArrowRight');
@@ -161,7 +168,60 @@ function readInput() {
   input.tuck = keys.has('KeyW') || keys.has('ArrowUp');
   input.brake = keys.has('KeyS') || keys.has('ArrowDown');
   input.jump = keys.has('Space');
+  input.walk = input.tuck;
+  input.run = keys.has('ShiftLeft') || keys.has('ShiftRight');
 }
+
+function restoreRide() {
+  const wasWalking = rider.locomotion === 'walk';
+  rider.setLocomotion('ride');
+  if (wasWalking) {
+    phys.vel.set(0, 0, 0);
+    phys.yawRate = 0;
+    phys.jumpCharge = 0;
+    trail.gap(phys.pos);
+  }
+}
+function toggleLocomotion() {
+  if (!phys.grounded || phys.crashed > 0) return;
+  if (rider.locomotion === 'walk') {
+    restoreRide();
+    hud.toast('On board · W push / tuck');
+    return;
+  }
+  if (!rider.setLocomotion('walk')) {
+    hud.toast('Choose a rider with walking animations in Outfit & gear');
+    return;
+  }
+  phys.vel.set(0, 0, 0);
+  phys.yawRate = phys.jumpCharge = phys.slip = 0;
+  trail.gap(phys.pos);
+  hud.toast('On foot · W walk · Shift run · F board');
+}
+
+const riderSelect = document.getElementById('rider-select');
+const riderStatus = document.getElementById('rider-status');
+let riderSelection = 0;
+async function chooseRider(id) {
+  const selection = ++riderSelection;
+  restoreRide();
+  riderSelect.value = id;
+  riderSelect.setAttribute('aria-busy', 'true');
+  riderStatus.textContent = 'Loading rider…';
+  let loaded = false;
+  try { loaded = await rider.selectModel(id); }
+  catch (err) { console.warn('Could not switch rider.', err); }
+  if (selection !== riderSelection) return;
+  // A failed load keeps the effective rider selected; an older request cannot
+  // overwrite the status of the latest choice.
+  riderSelect.value = rider.modelId;
+  riderSelect.removeAttribute('aria-busy');
+  riderStatus.textContent = loaded
+    ? (rider.model?.canWalk ? 'Ready · F switches board / on foot' : 'Ready · snowboarding')
+    : 'Could not load that rider. Previous rider kept; choose again to retry.';
+}
+riderSelect.addEventListener('change', () => { void chooseRider(riderSelect.value); });
+void chooseRider(initialRider);
 
 // ---------- Panels ----------
 const panel = document.getElementById('panel');
@@ -183,6 +243,7 @@ let elapsed = 0, timing = false, falls = 0;
 let camDir = new THREE.Vector3(startAt.dx, 0, startAt.dz);
 
 function startRun() {
+  restoreRide();
   phys.reset(spawn.x, spawn.z, yawOf(spawn.dx, spawn.dz));
   trail.clear();
   elapsed = 0; timing = false; falls = 0;
@@ -206,6 +267,8 @@ const introPanel = () => showPanel('Hemu · 禾木', `
     <span><kbd>S</kbd></span><span>skid to scrub speed</span>
     <span><kbd>Space</kbd></span><span>hold and release to ollie · spin in the air</span>
     <span><kbd>E</kbd></span><span>board a lift at its station</span>
+    <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose in Outfit &amp; gear</span>
+    <span><kbd>W</kbd><kbd>Shift</kbd></span><span>walk / run on foot · A/D turn · S stop</span>
     <span><kbd>R</kbd></span><span>back to the top</span>
   </div>
   <p class="dim">Terrain: real elevation data. Runs and lifts: OpenStreetMap / OpenSkiMap.</p>`, startRun);
@@ -374,7 +437,10 @@ if (new URLSearchParams(location.search).has('notitle')) {
 function updateRideCamera(dt) {
   const sp = phys.speed;
   _v.copy(phys.vel).setY(0);
-  if (sp > 2 && phys.crashed <= 0) {
+  if (rider.locomotion === 'walk') {
+    phys.forward(_v);
+    camDir.lerp(_v, 1 - Math.exp(-dt * 2.2)).normalize();
+  } else if (sp > 2 && phys.crashed <= 0) {
     _v.normalize();
     camDir.lerp(_v, 1 - Math.exp(-dt * 2.2)).normalize();
   }
@@ -391,13 +457,16 @@ function updateRideCamera(dt) {
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4();
 const _f = new THREE.Vector3(), _x = new THREE.Vector3(), _up = new THREE.Vector3();
 function poseRider(dt) {
-  _up.copy(phys.grounded ? phys.normal : _up.set(0, 1, 0));
+  const walking = rider.locomotion === 'walk';
+  if (walking || !phys.grounded) _up.set(0, 1, 0);
+  else _up.copy(phys.normal);
   phys.forward(_f);
   _f.addScaledVector(_up, -_f.dot(_up)).normalize();
   _x.crossVectors(_f, _up);
   _m.makeBasis(_x, _up, _w.copy(_f).negate());
   _q.setFromRotationMatrix(_m);
-  rider.root.quaternion.slerp(_q, 1 - Math.exp(-dt * 14));
+  if (walking) rider.root.quaternion.copy(_q);
+  else rider.root.quaternion.slerp(_q, 1 - Math.exp(-dt * 14));
   rider.root.position.copy(phys.pos);
 
   const sp = phys.speed;
@@ -407,10 +476,12 @@ function poseRider(dt) {
   if (!phys.grounded) lean *= 0.3;
   rider.pose.tumble = phys.crashed > 0 ? rider.pose.tumble + dt * 9 : 0;
   rider.update(dt, {
-    crouch: input.tuck ? 0.9 : input.brake ? 0.6 : 0.35 + phys.jumpCharge * 0.5,
-    lean,
-    twist: input.steer * 0.5,
-    air: !phys.grounded,
+    crouch: walking ? 0 : input.tuck ? 0.9 : input.brake ? 0.6 : 0.35 + phys.jumpCharge * 0.5,
+    lean: walking ? 0 : lean,
+    twist: walking ? 0 : input.steer * 0.5,
+    air: !walking && !phys.grounded,
+    locomotion: rider.locomotion,
+    speed: sp,
   });
 }
 
@@ -428,7 +499,11 @@ function frame() {
 
   if (state === 'ride') {
     acc += dt;
-    while (acc >= STEP) { phys.step(STEP, input); acc -= STEP; }
+    while (acc >= STEP) {
+      if (rider.locomotion === 'walk') phys.stepWalk(STEP, input);
+      else phys.step(STEP, input);
+      acc -= STEP;
+    }
     for (const ev of phys.events.splice(0)) {
       if (ev.type === 'crash') { falls++; hud.toast(ev.reason === 'tree' ? 'Tree!' : 'Wipeout!'); trail.gap(phys.pos); }
       if (ev.type === 'respawn') respawnInPlace();
@@ -441,7 +516,7 @@ function frame() {
     // Board track + spray.
     phys.forward(_f);
     _side.set(-_f.z, 0, _f.x);
-    if (phys.grounded && phys.crashed <= 0) {
+    if (rider.locomotion !== 'walk' && phys.grounded && phys.crashed <= 0) {
       trail.add(phys.pos, _side, 0.28);
       const kick = phys.slip * 0.6 + (input.brake ? 3 : 0) + Math.abs(phys.yawRate) * phys.speed * 0.08;
       const n = Math.min(6, Math.floor(kick * dt * 22 + Math.random()));
@@ -454,7 +529,7 @@ function frame() {
     poseRider(dt);
     updateRideCamera(dt);
     hud.update(phys, elapsed);
-    sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded);
+    sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded && rider.locomotion !== 'walk');
   } else if (state === 'lift') {
     const label = `${liftRide.ride.label} ↑`;
     updateLift(dt); // may step you off at the top
@@ -493,6 +568,7 @@ function frame() {
 // After a tree you're set beside its trunk, on the side you were passing it.
 const _n = new THREE.Vector3(), _d = new THREE.Vector3();
 function respawnInPlace() {
+  restoreRide();
   const dir = _d.copy(phys.crashDir);
   let x = phys.pos.x, z = phys.pos.z;
   for (let i = 0; i < 6; i++) {
@@ -539,6 +615,7 @@ function updateBoarding() {
 let liftRide = null;
 const _c = new THREE.Vector3();
 function board(ride) {
+  restoreRide();
   state = 'lift';
   // Sped up: 1–2 km of cable in 10–22 s.
   liftRide = { ride, t: 0, dur: THREE.MathUtils.clamp(ride.length / 110, 10, 22) };
@@ -579,6 +656,7 @@ function updateLift(dt) {
 
 // Step off at the top station onto the best open snow nearby, facing downhill.
 function unload(ride) {
+  restoreRide();
   const P = ride.top;
   const at = topSpot(ride);
   phys.reset(at.x, at.z, yawOf(at.dx, at.dz));
@@ -684,6 +762,7 @@ function liftEnds(lift) {
 // Space, Enter or Escape skips the drop.
 let arrival = null;
 function arrive(dest) {
+  restoreRide();
   spawn = dest;
   linkDiorama();
   state = 'arrive';

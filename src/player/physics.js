@@ -95,6 +95,46 @@ export class BoardPhysics {
     }
   }
 
+  // On foot: deliberate ground movement, without the board's downhill gravity.
+  // Keep the same map/building walls, and refuse cliffs and unwalkable slopes.
+  stepWalk(dt, input) {
+    if (dt <= 0) return;
+    this.prev.copy(this.pos);
+    this.grounded = true;
+    this.airTime = this.jumpCharge = this.slip = 0;
+    const targetTurn = input.steer * 2.6;
+    this.yawRate += (targetTurn - this.yawRate) * (1 - Math.exp(-dt * 10));
+    this.yaw += this.yawRate * dt;
+    this.hf.normalAt(this.pos.x, this.pos.z, this.normal);
+    this.forward(_f).addScaledVector(this.normal, -_f.dot(this.normal)).normalize();
+    const speed = input.walk && !input.brake ? (input.run ? 4 : 1.4) : 0;
+    const blend = 1 - Math.exp(-dt * (speed > 0 ? 8 : 14));
+    this.vel.x += (_f.x * speed - this.vel.x) * blend;
+    this.vel.z += (_f.z * speed - this.vel.z) * blend;
+    this.pos.x += this.vel.x * dt;
+    this.pos.z += this.vel.z * dt;
+    this.#walls();
+
+    const tree = this.forest.hit(this.pos.x, this.pos.z, 0.35);
+    const entersTree = tree && Math.hypot(this.pos.x - tree.x, this.pos.z - tree.z)
+      <= Math.hypot(this.prev.x - tree.x, this.prev.z - tree.z);
+    const height = this.hf.heightAt(this.pos.x, this.pos.z);
+    const distance = Math.hypot(this.pos.x - this.prev.x, this.pos.z - this.prev.z);
+    const normal = this.hf.normalAt(this.pos.x, this.pos.z, _n);
+    // 50 degrees is the steepest walkable surface. The small height tolerance
+    // absorbs sampled-height noise while still blocking an abrupt ledge.
+    if (entersTree || normal.y < Math.cos(Math.PI * 50 / 180)
+      || Math.abs(height - this.prev.y) > distance * 1.2 + 0.08) {
+      this.pos.copy(this.prev);
+      this.vel.set(0, 0, 0);
+      this.hf.normalAt(this.pos.x, this.pos.z, this.normal);
+    } else {
+      this.pos.y = height;
+      this.vel.y = (height - this.prev.y) / dt;
+      this.normal.copy(normal);
+    }
+  }
+
   #ground(dt, input, speed) {
     const n = this.hf.normalAt(this.pos.x, this.pos.z, _n);
     this.normal.copy(n);
