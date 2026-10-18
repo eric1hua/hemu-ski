@@ -26,9 +26,28 @@ camera down through a cloud to the top station; Space skips the flight, and
 `?notitle` in the URL skips the title altogether.
 
 Click the mini-map in the top right (or press **M**) for the whole map, north up,
-with an arrow where you are, the lifts by number and the service centres. The
+with an arrow where you are, the lifts by number and the service centres. Each
+lift's dashed line has a dot at its bottom station, where you board, and a ring
+at its top, where you get off. The
 ride waits while it's open; Escape, M or **Back to riding** closes it. **See it on
-the diorama** opens the diorama on the same spot.
+the diorama** opens the diorama on the same spot. Scroll (or pinch, on a
+trackpad or touch screen) to zoom, down to 500 m across, and drag to move it;
+zoomed in, the runs are named. The buttons down its right edge zoom in and out,
+centre on you and show the whole map again (+, − and 0 on the keyboard too, and
+the arrow keys move it).
+
+The big map is also a GPS, as in GTA. Hover it to see what's under the pointer,
+and click or tap a run, a lift station or a service centre to make it your destination.
+The quickest way there, over runs ridden downhill and lifts ridden up, is drawn
+in purple on both maps: solid where you ride the snow, dashed up a lift, with a
+ring where you board and where you get off, and a pin at the end (held on the mini-map's rim when
+it's further off). A card under the mini-map says what to do next ("Ride 云霄峰道
+830 m", "Board 5号索道") and how far and how long the rest is. On the snow,
+chevrons mark the next 300 m and a column of light stands over the destination.
+Wander off the route and it finds a new one from where you are; ride a different
+lift and it plans on from that lift's top. It clears when you get there. Click or
+tap the pin again, press Delete or **Clear route** on the big map to drop it. The
+destination lasts through a reload or a trip to the diorama in the same tab.
 
 A menu rail on the left edge links to the diorama, picks your rider (**Rider**:
 male, female or the classic one; the female rider can also walk and run off the
@@ -120,7 +139,7 @@ edits were saved.
 | Space | hold and release to ollie, steer in the air to spin |
 | E | board a lift at its bottom station or a service centre (Space skips the ride) |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
-| M | the whole map, with you on it (or click the mini-map) |
+| M | the whole map, with you on it (or click the mini-map); click it to set a GPS destination, Delete clears it, scroll / + / − zoom, drag or arrows move it |
 
 ## How it's built
 
@@ -141,6 +160,11 @@ edits were saved.
 - `src/player/rider.js` builds the snowboarder from primitives after the
   character sheet in `refs/player-turnaround.webp`. The face is a painted
   canvas texture, and the legs use two-bone IK.
+- `src/gps/route.js` builds the GPS's graph from the runs (resampled every
+  25 m and ridden downhill, crossing onto other runs where they meet) and the
+  lifts, and finds the quickest way with Dijkstra, costed in seconds by
+  difficulty and lift time. `src/gps/navigator.js` follows you along it and
+  reroutes, and `src/gps/marks.js` paints it on the snow.
 - `src/player/physics.js` handles slope gravity, edge grip that turns sideways
   slip back into forward speed, drag, ollies, natural take-offs on rollovers,
   tree crashes, and walls (the map edge, lift stations and service centres).

@@ -11,6 +11,8 @@ import { BoardPhysics } from './player/physics.js';
 import { Trail, Spray } from './player/fx.js';
 import { Hud } from './hud.js';
 import { BigMap } from './bigmap.js';
+import { Navigator } from './gps/navigator.js';
+import { RouteMarks } from './gps/marks.js';
 import { Sound } from './audio.js';
 import { createMenu } from './menu.js';
 import { createIsland, createTitleLetters, createSnowSpecks, createCloudWipe } from './intro.js';
@@ -141,8 +143,15 @@ scene.add(trail.mesh, spray.points);
 const hud = new Hud(world, piste);
 const sound = new Sound();
 const menu = createMenu(sound);
+// The GPS: pick a destination on the big map and it routes you there.
+const gps = new Navigator({ hf: detail, runs: meta.runs, rides });
+hud.gps = gps;
+// Where you are, for the GPS: on the snow, or riding a lift up.
+const gpsFrom = () => ({ x: phys.pos.x, z: phys.pos.z, y: phys.pos.y, lift: state === 'lift' ? liftRide.ride.id : null });
+const marks = new RouteMarks(detail);
+scene.add(marks.group);
 const bigMap = new BigMap({
-  hud, detail, runs: meta.runs, lifts: rides, onClose: closeMap,
+  hud, detail, runs: meta.runs, lifts: rides, lines: meta.lifts, gps, onClose: closeMap,
   onDiorama: () => leaveFor(dioramaHref('you'), 'Finding you on the diorama'),
 });
 
@@ -153,6 +162,8 @@ window.addEventListener('keydown', (e) => {
   // The big map takes the keys while it's open; Escape or M closes it.
   if (bigMap.isOpen) {
     if ((e.code === 'Escape' || e.code === 'KeyM') && !e.repeat) closeMap();
+    else if ((e.code === 'Delete' || e.code === 'Backspace') && !isControl(e.target)) bigMap.clearRoute();
+    else if (!isControl(e.target) && bigMap.key(e.code)) e.preventDefault();
     return;
   }
   if (isControl(e.target)) return;
@@ -285,9 +296,11 @@ function startRun(at = spawn) {
   state = 'ride';
   hud.show(true);
   hud.toast(at.toast, 2000);
+  gps.reroute(gpsFrom());
 }
 
 phys.reset(startAt.x, startAt.z, yawOf(startAt.dx, startAt.dz));
+gps.restore(gpsFrom()); // a destination set before a reload or a trip to the diorama
 const introPanel = () => showPanel('Hemu · 禾木', `
   <p>Top of <b>Gondola No. 6</b>, Hemu Jikepulin, Altay — 2,756 m.
   The whole mountain is yours: drop into <b>云霄峰道 Yunxiaofeng</b> (${Math.round(runLength)} m) or ride anywhere,
@@ -578,6 +591,13 @@ function frame() {
     else if (state === 'arrive') updateArrival(dt);
     sound.update(0, 0, false);
   }
+  const onMountain = state === 'ride' || state === 'lift';
+  if (onMountain && !bigMap.isOpen) {
+    const ev = gps.update(dt, gpsFrom());
+    if (ev?.type === 'arrived') hud.toast(`Arrived · ${ev.name}`, 2600);
+  }
+  marks.group.visible = onMountain;
+  if (onMountain) marks.update(gps, time, state === 'lift', phys.pos);
   if ((state === 'ride' || state === 'lift') && (whereT -= dt) <= 0) {
     whereT = 0.25;
     saveWhereabouts(whereabouts());
@@ -598,7 +618,7 @@ function frame() {
   sun.position.copy(phys.pos).addScaledVector(sunDir, 250);
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, spray.points, specks.points, backdrop, ...forest.farMeshes]);
+  post.render(scene, camera, time, [sky, spray.points, specks.points, backdrop, ...forest.farMeshes, ...marks.hidden]);
   requestAnimationFrame(frame);
 }
 
@@ -706,6 +726,7 @@ function unload(ride) {
   state = 'ride';
   hud.prompt('');
   hud.toast(`${ride.label} · ${Math.round(P.y).toLocaleString()} m`, 2000);
+  gps.reroute(gpsFrom()); // stepped off at the top: on from here
 }
 function topSpot(ride) {
   const P = ride.top;
@@ -954,5 +975,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

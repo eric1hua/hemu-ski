@@ -3,6 +3,7 @@
   --paper: #fbfaf5;
   --tab: #7fb0e3;
   --accent: #f0c24a;
+  --route: #9b5de5;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #8ccac4; }
@@ -98,6 +99,20 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 :is(#hud, #bigmap) .badge:is(.advanced, .expert) { background: #23303a; transform: rotate(45deg) scale(0.85); }
 :is(#hud, #bigmap) .badge.offpiste { background: #fbfaf5; border-style: dashed; border-radius: 50%; }
 :is(#hud, #bigmap) .badge.lift { background: var(--accent); border-radius: 4px; height: 16px; }
+:is(#hud, #bigmap) .badge.hall { background: #5f8064; border-radius: 3px; }
+:is(#hud, #bigmap) .badge.pin { background: var(--route); border-radius: 50% 50% 50% 0; transform: rotate(-45deg) scale(0.85); }
+
+/* GPS card under the mini-map: the next thing to do on the way, and the rest. */
+#gps {
+  position: absolute; right: 18px; top: 236px; width: 260px; display: flex; align-items: flex-start; gap: 10px;
+  background: var(--paper); border: 2.5px solid var(--ink); border-left: 8px solid var(--route);
+  padding: 5px 12px 6px 9px; box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35);
+}
+#gps .badge { margin-top: 3px; }
+#gps p { margin: 0; line-height: 1.15; }
+#gps .act { font-weight: normal; font-size: 20px; }
+#gps .dist { margin-left: 8px; font-family: 'Patrick Hand SC', cursive; font-size: 19px; color: var(--route); white-space: nowrap; }
+#gps .then { font-size: 15px; opacity: 0.7; margin-top: 2px; }
 
 #hud .stats {
   position: absolute; left: 18px; bottom: 18px; display: flex; gap: 10px;
@@ -238,8 +253,9 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
   position: fixed; inset: 0; display: grid; place-items: center; padding: 30px 16px 16px;
   background: rgba(35, 48, 58, 0.3);
 }
+/* As wide as the map: the foot wraps under it rather than widening the sheet. */
 #bigmap .sheet {
-  position: relative; background: var(--paper); border: 2.5px solid var(--ink);
+  width: min-content; position: relative; background: var(--paper); border: 2.5px solid var(--ink);
   box-shadow: 6px 6px 0 rgba(35, 48, 58, 0.35); padding: 26px 16px 14px;
 }
 #bigmap .x {
@@ -248,12 +264,24 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 }
 #bigmap .frame {
   position: relative; overflow: hidden; aspect-ratio: 1;
-  width: min(640px, calc(100vw - 68px), calc(100vh - 190px));
+  width: min(640px, calc(100vw - 68px), calc(100vh - 236px)); min-width: 220px;
   border: 2px solid var(--ink); background: var(--paper);
 }
-#bigmap canvas { display: block; width: 100%; height: 100%; }
+#bigmap canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+#bigmap canvas.dragging { cursor: grabbing; }
+/* Zoom, find me and the whole map, down the map's right edge. */
+#bigmap .zoom { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 6px; }
+#bigmap .zoom button {
+  width: 34px; height: 34px; padding: 0; display: grid; place-items: center; cursor: pointer;
+  font: inherit; font-size: 26px; line-height: 1; color: var(--ink);
+  background: var(--paper); border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink);
+}
+#bigmap .zoom svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#bigmap .zoom button:hover:not(:disabled) { background: #fff; }
+#bigmap .zoom button:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+#bigmap .zoom button:disabled { opacity: 0.35; cursor: default; }
 /* Where you are: the mini-map's arrow, a pulsing ring, and a tag. */
-#bigmap .you { position: absolute; width: 0; height: 0; }
+#bigmap .you { position: absolute; width: 0; height: 0; pointer-events: none; }
 #bigmap .you svg {
   position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; overflow: visible;
   fill: var(--accent); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round;
@@ -274,6 +302,23 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 #bigmap .you.flip-x b { left: auto; right: 14px; }
 #bigmap .you.flip-y b { bottom: auto; top: 12px; }
 #bigmap .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; }
+/* The GPS line: the destination, or how to pick one. */
+#bigmap .dest {
+  flex: 1 0 100%; margin: 0; display: flex; align-items: center; gap: 10px; font-size: 19px; line-height: 1.15;
+  padding-bottom: 8px; border-bottom: 2px dashed rgba(35, 48, 58, 0.25);
+}
+#bigmap .dest .what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#bigmap .dest .clear {
+  flex: none; font: inherit; font-size: 16px; color: var(--ink); cursor: pointer; white-space: nowrap;
+  background: #fff; border: 2px solid var(--ink); padding: 0 10px 2px; box-shadow: 2px 2px 0 var(--ink);
+}
+/* The place under the pointer, placed beside it from bigmap.js. */
+#bigmap .pick {
+  position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap;
+  max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis;
+  font-size: 16px; line-height: 1; background: var(--paper); border: 2px solid var(--ink); padding: 2px 7px 4px;
+  box-shadow: 2px 2px 0 rgba(35, 48, 58, 0.35);
+}
 #bigmap .here { margin: 0; display: flex; align-items: center; gap: 10px; font-size: 21px; line-height: 1.1; }
 #bigmap .here .alt { font-size: 17px; opacity: 0.65; }
 #bigmap .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
@@ -297,8 +342,22 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 
 @media (max-width: 640px) {
   #minimap { width: 120px; height: 120px; }
+  #gps { top: 152px; width: min(240px, calc(100vw - 36px)); }
   #bigmap .acts { margin-left: 0; }
   #hud .stats > div { min-width: 70px; padding: 2px 8px; }
   #hud .stats b { font-size: 22px; }
   .panel { font-size: 18px; }
+}
+
+/* Short landscape screens (a phone on its side): the map's foot goes beside it. */
+@media (max-height: 520px) and (orientation: landscape) {
+  #bigmap { padding: 26px 12px 10px; }
+  #bigmap .sheet {
+    width: auto; display: grid; grid-template-columns: auto minmax(170px, 260px); gap: 0 14px;
+    align-items: start; padding: 22px 12px 12px;
+  }
+  #bigmap .frame { width: min(640px, calc(100vh - 82px), calc(100vw - 250px)); min-width: 0; }
+  #bigmap .foot { flex-direction: column; align-items: stretch; flex-wrap: nowrap; margin-top: 0; }
+  #bigmap .dest { flex: none; flex-wrap: wrap; }
+  #bigmap .acts { margin-left: 0; flex-direction: column; }
 }

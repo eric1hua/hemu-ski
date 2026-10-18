@@ -22,6 +22,11 @@
       <button type="button" id="minimap-open" data-tip="Map · M" aria-label="Open the map (M)" aria-controls="bigmap" aria-expanded="false">
         <canvas id="minimap" width="200" height="200"></canvas>
       </button>
+      <!-- GPS: what to do next on the way to the big map's destination. -->
+      <div id="gps" class="hidden" role="status" aria-live="polite">
+        <span class="badge"></span>
+        <div><p><b class="act"></b><span class="dist"></span></p><p class="then"></p></div>
+      </div>
       <div id="toast"></div>
       <div id="prompt"></div>
     </div>
@@ -117,6 +122,17 @@
         <button type="button" class="x" aria-label="Close the map">×</button>
         <div class="frame">
           <canvas></canvas>
+          <div class="pick hidden" aria-hidden="true"></div>
+          <div class="zoom" role="group" aria-label="Zoom">
+            <button type="button" class="zin" aria-label="Zoom in (+)" title="Zoom in (+)">+</button>
+            <button type="button" class="zout" aria-label="Zoom out (−)" title="Zoom out (−)">−</button>
+            <button type="button" class="zme" aria-label="Centre on you" title="Centre on you">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4" /></svg>
+            </button>
+            <button type="button" class="zfit" aria-label="Whole map (0)" title="Whole map (0)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
+            </button>
+          </div>
           <div class="you" aria-hidden="true">
             <i></i>
             <svg viewBox="-12 -12 24 24"><path d="M0-11 7 8 0 4-7 8z" /></svg>
@@ -124,6 +140,7 @@
           </div>
         </div>
         <div class="foot">
+          <p class="dest"><span class="badge"></span><span class="what"></span><button type="button" class="clear hidden">Clear route</button></p>
           <p class="here"><span class="badge"></span><span class="name"></span><span class="alt"></span></p>
           <div class="acts">
             <button type="button" class="go">See it on the diorama ▸</button>

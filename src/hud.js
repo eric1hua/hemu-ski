@@ -1,6 +1,7 @@
 import { SERVICE_CENTRES } from './world/data.js';
+import { drawPin } from './gps/navigator.js';
 
-const DIFF = { easy: '#4f8fd6', novice: '#4f8fd6', intermediate: '#d9534a', advanced: '#23303a', expert: '#23303a' };
+export const DIFF = { easy: '#4f8fd6', novice: '#4f8fd6', intermediate: '#d9534a', advanced: '#23303a', expert: '#23303a' };
 const $ = (id) => document.getElementById(id);
 
 export class Hud {
@@ -25,10 +26,12 @@ export class Hud {
     const { detail, meta } = this.world;
     const ppm = 0.3; // pixels per metre
     const N = Math.round(detail.size * ppm);
-    const c = document.createElement('canvas');
-    c.width = c.height = N;
-    const g = c.getContext('2d');
-    const img = g.createImageData(N, N);
+    // The shaded relief and contours on their own, for the big map to draw its
+    // runs over at any zoom; the mini-map's copy has them baked in.
+    const relief = document.createElement('canvas');
+    relief.width = relief.height = N;
+    const rg = relief.getContext('2d');
+    const img = rg.createImageData(N, N);
     const { x0, z0 } = detail;
     const H = new Float32Array(N * N);
     for (let j = 0; j < N; j++)
@@ -45,7 +48,11 @@ export class Hud {
         }
         img.data.set([r, gg, b, 255], k * 4);
       }
-    g.putImageData(img, 0, 0);
+    rg.putImageData(img, 0, 0);
+    const c = document.createElement('canvas');
+    c.width = c.height = N;
+    const g = c.getContext('2d');
+    g.drawImage(relief, 0, 0);
     const toPx = (p) => [(p[0] - x0) * ppm, (p[1] - z0) * ppm];
     g.lineCap = 'round';
     g.lineJoin = 'round';
@@ -72,6 +79,7 @@ export class Hud {
       g.strokeRect(px - 12, pz - 12, 24, 24);
     }
     this.mapCanvas = c;
+    this.reliefCanvas = relief;
     this.ppm = ppm;
   }
 
@@ -107,6 +115,7 @@ export class Hud {
     ctx.scale(scale, scale);
     ctx.drawImage(this.mapCanvas, -cx, -cz);
     ctx.restore();
+    if (this.gps?.waypoint) this.#drawRoute(ctx, phys.pos, W / view);
     ctx.save();
     ctx.translate(W / 2, W / 2);
     ctx.rotate(-phys.yaw);
@@ -121,6 +130,18 @@ export class Hud {
     ctx.font = '16px "Patrick Hand SC", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('N', W / 2, 18);
+  }
+
+  // The GPS route on the mini-map, and the destination's pin, held on the rim
+  // when it's further than the map shows.
+  #drawRoute(ctx, at, k) {
+    const W = ctx.canvas.width, R = W / 2;
+    const px = (x, z) => [R + (x - at.x) * k, R + (z - at.z) * k];
+    this.gps.drawRoute(ctx, px, { width: 4 });
+    const [u, v] = px(this.gps.waypoint.x, this.gps.waypoint.z);
+    const du = u - R, dv = v - R, d = Math.hypot(du, dv), rim = R - 16;
+    if (d < rim) drawPin(ctx, u, v, 0.8);
+    else drawPin(ctx, R + (du / d) * rim, R + (dv / d) * rim + 10, 0.7);
   }
 
   // Persistent hint (HTML, e.g. with <kbd>); empty hides it.
