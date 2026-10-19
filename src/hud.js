@@ -20,6 +20,7 @@ export class Hud {
     this.#prerenderMap();
     this.lastRun = null;
     this.place = { name: '', badge: 'offpiste' };
+    this.truck = null; // the parked pickup's footprint { x, z, yaw }, shown on the mini-map
   }
 
   #prerenderMap() {
@@ -116,6 +117,7 @@ export class Hud {
     ctx.drawImage(this.mapCanvas, -cx, -cz);
     ctx.restore();
     if (this.gps?.waypoint) this.#drawRoute(ctx, phys.pos, W / view);
+    if (this.truck) this.#drawTruck(ctx, phys.pos, W / view);
     ctx.save();
     ctx.translate(W / 2, W / 2);
     ctx.rotate(-phys.yaw);
@@ -142,6 +144,27 @@ export class Hud {
     const du = u - R, dv = v - R, d = Math.hypot(du, dv), rim = R - 16;
     if (d < rim) drawPin(ctx, u, v, 0.8);
     else drawPin(ctx, R + (du / d) * rim, R + (dv / d) * rim + 10, 0.7);
+  }
+
+  // The parked pickup: a red block, nose up for north, held on the rim when it's
+  // further than the map shows.
+  #drawTruck(ctx, at, k) {
+    const W = ctx.canvas.width, R = W / 2, rim = R - 12;
+    let u = (this.truck.x - at.x) * k, v = (this.truck.z - at.z) * k;
+    const d = Math.hypot(u, v);
+    if (d > rim) { u *= rim / d; v *= rim / d; }
+    ctx.save();
+    ctx.translate(R + u, R + v);
+    ctx.rotate(-this.truck.yaw);
+    ctx.fillStyle = '#d9604c';
+    ctx.strokeStyle = '#23303a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(-5, -9, 10, 18, 3);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#23303a';
+    ctx.fillRect(-3.5, -5, 7, 4); // the cab's windscreen, toward the nose
+    ctx.restore();
   }
 
   // Persistent hint (HTML, e.g. with <kbd>); empty hides it.

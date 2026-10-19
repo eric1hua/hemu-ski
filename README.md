@@ -49,6 +49,15 @@ lift and it plans on from that lift's top. It clears when you get there. Click o
 tap the pin again, press Delete or **Clear route** on the big map to drop it. The
 destination lasts through a reload or a trip to the diorama in the same tab.
 
+A red pickup is parked in front of the East Service Centre, for now. Any rider
+can drive it: skate or walk up to it and press **E** to get in, and E again to
+get out at the driver's door (on foot, if you walked up). W drives, S brakes and
+then reverses, A and D steer, and Space is the handbrake, which lets the tail
+out. R takes it back to its spot by the hall. It's a 4×4 on snow, so it won't
+climb what's too steep, slides on a slope too steep to hold, runs wide in a fast
+turn and bounces off trees and buildings. It leaves tyre tracks, and the
+mini-map shows where you left it. A reload parks it by the hall again.
+
 A menu rail on the left edge links to the diorama, picks your rider (**Rider**:
 male, female or the classic one; the female rider can also walk and run off the
 board with F) and switches music and sound effects on and off. The game
@@ -137,8 +146,9 @@ edits were saved.
 | W (↑) | tuck; push along on the flat |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
-| E | board a lift at its bottom station or a service centre (Space skips the ride) |
+| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup beside it |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
+| In the pickup | W drive, S brake / reverse, A / D steer, Space handbrake, R back to the hall |
 | M | the whole map, with you on it (or click the mini-map); click it to set a GPS destination, Delete clears it, scroll / + / − zoom, drag or arrows move it |
 
 ## How it's built
@@ -168,6 +178,11 @@ edits were saved.
 - `src/player/physics.js` handles slope gravity, edge grip that turns sideways
   slip back into forward speed, drag, ollies, natural take-offs on rollovers,
   tree crashes, and walls (the map edge, lift stations and service centres).
+- `src/vehicle/truck.js` loads the pickup (`public/models/truck/`, one Tripo
+  mesh) and splits its tyres and rims out of it by connected piece, so the
+  wheels roll and the front ones steer. `src/vehicle/physics.js` drives it: a
+  bicycle model whose engine, brakes and turning all share the tyres' grip on
+  snow, with the body set on the plane under its four wheels.
 
 ## What's approximate
 
