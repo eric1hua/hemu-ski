@@ -1,9 +1,10 @@
-// Arcade pickup handling on the real heightfield: a 4×4 on snow.
-// The truck rolls downhill under gravity; the engine, the brakes and the turn
-// all draw on the same tyre grip, so it can't climb what's too steep, slides
-// on a slope too steep to hold, and runs wide in a fast turn. The handbrake
-// lets the tail out. It stays on the ground, pitched and rolled to the plane
-// under its four wheels.
+// Arcade vehicle handling on the real heightfield: the pickup, a 4×4 on snow,
+// and the snowmobile, on its track and skis.
+// A vehicle rolls downhill under gravity; the engine, the brakes and the turn
+// all draw on the same grip, so it can't climb what's too steep, slides on a
+// slope too steep to hold, and runs wide in a fast turn. The handbrake lets the
+// tail out. It stays on the ground, pitched and rolled to the plane under its
+// four corners (the wheels, or the skis and the track).
 // Walls are the edge of the heightfield, tiles deleted in the map editor, the
 // buildings (`obstacles`, rotated boxes { x, z, yaw, hw, hd }) and the trees;
 // it bounces off them rather than crashing.
@@ -12,26 +13,47 @@ import { PISTE_HALF_WIDTH } from '../world/data.js';
 
 const G = 9.81;
 const EDGE = 40; // metres kept clear of the heightfield's edge
-const ENGINE = 6.5; // m/s² from a standstill, fading to nothing at TOP_SPEED
-const TOP_SPEED = 30;
-const REVERSE = 3.5, REVERSE_SPEED = 7;
-const BRAKE = 9;
-const MAX_SPEED = 40; // even downhill
-const GRIP = 0.55; // tyres on snow
-const STEER = 0.6; // full lock at a crawl (rad); less as you go faster
+// How a vehicle handles. The pickup's:
+export const PICKUP = {
+  engine: 6.5, // m/s² from a standstill, fading to nothing at topSpeed
+  topSpeed: 30,
+  reverse: 3.5, reverseSpeed: 7,
+  brake: 9,
+  maxSpeed: 40, // even downhill
+  grip: 0.55, // tyres on snow
+  steer: 0.6, // full lock at a crawl (rad); less as you go faster
+  drag: [0.03, 0.08], // rolling resistance (× g) on a piste, and off it in deep snow
+  air: 0.0016, // air resistance, m/s² per (m/s)²
+};
+// The snowmobile's: a big engine (as hard off the mark as the track can grip,
+// 180 km/h in about 10 s and 200 km/h, its limit, in about 14 s on the flat), a
+// track that bites into steeper snow, skis that turn less sharply, poor brakes,
+// and it floats on the powder.
+export const SNOWMOBILE = {
+  engine: 16, topSpeed: 66,
+  reverse: 2, reverseSpeed: 4,
+  brake: 6,
+  maxSpeed: 200 / 3.6,
+  grip: 0.7,
+  steer: 0.5,
+  drag: [0.025, 0.04],
+  air: 0.0006,
+};
 const _f = new THREE.Vector3(), _l = new THREE.Vector3(), _n = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _z = new THREE.Vector3();
 
 const towardZero = (v, by) => Math.sign(v) * Math.max(0, Math.abs(v) - by);
 
-export class TruckPhysics {
-  // `dims`: the truck's { wheelbase, track, wheelRadius, halfWidth, halfLength }.
-  constructor({ hf, piste, forest, obstacles = [], dims }) {
+export class VehiclePhysics {
+  // `dims`: the vehicle's { wheelbase, track, wheelRadius, halfWidth, halfLength };
+  // `handling` as PICKUP's.
+  constructor({ hf, piste, forest, obstacles = [], dims, handling = PICKUP }) {
     this.hf = hf;
     this.piste = piste;
     this.forest = forest;
     this.obstacles = obstacles;
     this.dims = dims;
+    this.h = handling;
     this.pos = new THREE.Vector3(); // on the ground, midway between the axles
     this.prev = new THREE.Vector3();
     this.vel = new THREE.Vector3(); // horizontal
@@ -41,7 +63,7 @@ export class TruckPhysics {
     this.yawRate = 0;
     this.steer = 0; // front wheel angle, + to the left
     this.roll = 0; // wheel rotation, for the model
-    this.accel = 0; // along the truck, smoothed, for the body's lean
+    this.accel = 0; // along the vehicle, smoothed, for the body's lean
     this.lateral = 0; // toward its left
     this.slip = 0; // sideways speed
     this.events = [];
@@ -57,12 +79,12 @@ export class TruckPhysics {
 
   get speed() { return this.vel.length(); }
   forward(out = new THREE.Vector3()) { return out.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)); }
-  // Toward the truck's left (the driver's side).
+  // Toward the vehicle's left (the pickup's driver's side).
   left(out = new THREE.Vector3()) { return out.set(-Math.cos(this.yaw), 0, Math.sin(this.yaw)); }
 
   // input: { throttle, reverse, steer (-1…1, + left), handbrake }
   step(dt, input) {
-    const { dims } = this;
+    const { dims, h: H } = this;
     this.prev.copy(this.pos);
     const f = this.forward(_f), l = this.left(_l), n = this.normal;
     let vF = this.vel.dot(f), vL = this.vel.dot(l);
@@ -70,7 +92,7 @@ export class TruckPhysics {
 
     // Gravity along the ground under the wheels.
     const gF = G * n.y * n.dot(f), gL = G * n.y * n.dot(l);
-    const grip = GRIP * G * n.y;
+    const grip = H.grip * G * n.y;
     const onPiste = this.piste.distAt(this.pos.x, this.pos.z) < PISTE_HALF_WIDTH + 2;
 
     // Pedals. S brakes, then reverses once you've stopped; W the same the other
@@ -78,24 +100,24 @@ export class TruckPhysics {
     let push = 0, brake = 0;
     const { throttle, reverse, handbrake } = input;
     if (throttle && !reverse) {
-      if (vF < -0.3) brake = BRAKE;
-      else push = ENGINE * Math.max(0, 1 - vF / TOP_SPEED);
+      if (vF < -0.3) brake = H.brake;
+      else push = H.engine * Math.max(0, 1 - vF / H.topSpeed);
     } else if (reverse && !throttle) {
-      if (vF > 0.3) brake = BRAKE;
-      else push = -REVERSE * Math.max(0, 1 + vF / REVERSE_SPEED);
-    } else if (throttle && reverse) brake = BRAKE;
-    else brake = Math.abs(vF) < 1.5 ? BRAKE : 0.6; // holding, or engine braking
+      if (vF > 0.3) brake = H.brake;
+      else push = -H.reverse * Math.max(0, 1 + vF / H.reverseSpeed);
+    } else if (throttle && reverse) brake = H.brake;
+    else brake = Math.abs(vF) < 1.5 ? H.brake : 0.6; // holding, or engine braking
     if (handbrake) brake = Math.max(brake, 4);
     push = THREE.MathUtils.clamp(push, -grip, grip);
     brake = Math.min(brake, grip);
-    const resist = (onPiste ? 0.03 : 0.08) * G * n.y + 0.0016 * vF * vF;
+    const resist = H.drag[onPiste ? 0 : 1] * G * n.y + H.air * vF * vF;
     vF += (gF + push) * dt;
     vF = towardZero(vF, (brake + resist) * dt);
 
     // Steering: less lock the faster you go; the turn is held to what the
     // tyres can grip, more with the handbrake's tail out.
     const sp = Math.abs(vF);
-    const target = input.steer * STEER / (1 + (sp * sp) / 180);
+    const target = input.steer * H.steer / (1 + (sp * sp) / 180);
     this.steer += (target - this.steer) * (1 - Math.exp(-dt * 8));
     const maxRate = (grip * (handbrake ? 2.2 : 1.25)) / Math.max(sp, 2);
     let rate = (vF * Math.tan(this.steer)) / dims.wheelbase;
@@ -108,10 +130,10 @@ export class TruckPhysics {
     vL = towardZero(vL + gL * dt, grip * (handbrake ? 0.35 : 1.2) * dt);
     this.slip = Math.abs(vL);
 
-    // Back into world space along the old heading: the truck has turned under
+    // Back into world space along the old heading: the vehicle has turned under
     // its velocity, and next step the tyres pull that round as far as they grip.
     this.vel.copy(f).multiplyScalar(vF).addScaledVector(l, vL);
-    if (this.vel.length() > MAX_SPEED) this.vel.setLength(MAX_SPEED);
+    if (this.vel.length() > H.maxSpeed) this.vel.setLength(H.maxSpeed);
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     this.#walls();
@@ -141,8 +163,8 @@ export class TruckPhysics {
     this.quat.setFromRotationMatrix(_m.makeBasis(_x, this.normal, _z));
   }
 
-  // Slide along the map edge, deleted tiles, buildings and trees. The truck is
-  // three circles down its length, each as wide as the body.
+  // Slide along the map edge, deleted tiles, buildings and trees. The vehicle
+  // is three circles down its length, each as wide as the body.
   #walls() {
     const { hf, pos, vel, prev, dims } = this;
     const lim = hf.half - EDGE - dims.halfLength;

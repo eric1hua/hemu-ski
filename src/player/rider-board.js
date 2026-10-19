@@ -46,7 +46,7 @@ export async function loadBoardAssembly(rider) {
       group.add(part);
     }
     group.scale.setScalar(1.2);
-    group.position.copy(rider.feet[i].position);
+    group.position.copy(rider.stance[i]); // the feet's spots on the board, even if they're on a footrest now
     group.position.y -= 0.02; // thin base under the existing IK sole datum
     root.add(group);
   }

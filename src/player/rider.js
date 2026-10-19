@@ -75,6 +75,25 @@ function backpackTexture() {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+const DOWN = new THREE.Vector3(0, -1, 0);
+// The primitive character's build, for sitting on a seat: how high its hips sit
+// above the cushion, where its torso pivots above the hips, its shoulders
+// (out, up) from that pivot, and how far its arms reach (shoulder to mitt).
+const UPPER_ARM = 0.22, FOREARM = 0.25;
+const CLASSIC_BUILD = { seat: 0.15, pivot: 0.04, shoulder: [0.26, 0.43], reach: UPPER_ARM + FOREARM };
+
+// How far forward (radians) a seated rider with `build` folds at the waist for
+// its hands to reach `grip` from hips at `hips` (body frame): upright enough to
+// look ahead, leaning on only as far as the arms need.
+export function reachFold(build, hips, grip) {
+  const [out, up] = build.shoulder;
+  const y = hips.y + build.pivot;
+  for (let a = 0.15; a < 1.2; a += 0.02) {
+    const d = Math.hypot(Math.abs(grip.x) - out, grip.y - (y + up * Math.cos(a)), grip.z - (hips.z + up * Math.sin(a)));
+    if (d < build.reach * 0.95) return a;
+  }
+  return 1.2;
+}
 
 function mesh(geo, mat, parent, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(geo, mat);
@@ -144,6 +163,8 @@ export class Rider {
     this.bindings = [];
     this.boots = []; // primitive boots and straps, hidden when the model boots stand in them
     this.#buildCharacter();
+    this.stance = this.feet.map((f) => f.position.clone()); // the feet on the board
+    this.seat = null; // on a vehicle: see setLocomotion
 
     this.pose = { crouch: 0.4, lean: 0, twist: 0, armSwing: 0, air: 0, tumble: 0 };
     this.t = 0;
@@ -172,7 +193,7 @@ export class Rider {
       }
     }
     if (selection !== this.selection) return false;
-    this.setLocomotion('ride');
+    if (this.locomotion !== 'sit') this.setLocomotion('ride'); // a seated rider stays on the seat
     if (this.model) this.body.remove(this.model.root);
     this.model = model;
     this.modelId = id;
@@ -183,8 +204,15 @@ export class Rider {
     return true;
   }
 
-  setLocomotion(mode) {
+  // 'ride' on the board, 'walk' on foot (riders with walk and run clips), or
+  // 'sit' on a vehicle's `seat`: { hips, feet: [left, right], grips: [left, right] },
+  // the cushion under the hips, the soles' spots and the handlebar grips, in the
+  // body's frame (+z forward, +x left), the root following the vehicle.
+  setLocomotion(mode, seat = this.seat) {
     if (mode === 'walk' && !this.model?.canWalk) return false;
+    if (mode === 'sit' && !seat) return false;
+    this.seat = seat;
+    if (mode !== 'sit') this.feet.forEach((f, i) => f.position.copy(this.stance[i]));
     this.locomotion = mode;
     this.#gearVisibility();
     return true;
@@ -195,7 +223,7 @@ export class Rider {
     this.proceduralBoard.visible = riding && this.modelId !== 'female';
     if (this.boardAssembly) this.boardAssembly.visible = riding && this.modelId === 'female';
     for (const binding of this.bindings) binding.visible = riding && this.modelId !== 'female';
-    for (const boot of this.boots) boot.visible = !this.model && riding;
+    for (const boot of this.boots) boot.visible = !this.model && this.locomotion !== 'walk';
   }
 
   #buildCharacter() {
@@ -341,6 +369,48 @@ export class Rider {
     p.twist += (s.twist - p.twist) * k;
     p.air += ((s.air ? 1 : 0) - p.air) * (1 - Math.exp(-dt * 6));
 
+    const sitting = this.locomotion === 'sit';
+    if (sitting) this.#sit(p);
+    else this.#carve(p);
+
+    // Legs: two-bone IK from hip socket to ankle, knees driven forward (and
+    // out round the seat when sitting).
+    const fwd = new THREE.Vector3(0, 0, 1);
+    this.kneeOut = sitting ? 0.45 : 0.12;
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? 1 : -1;
+      const hip = new THREE.Vector3(0.12 * side, 0, 0).applyEuler(this.hips.rotation).add(this.hips.position);
+      const ankle = this.feet[i].position.clone().add(new THREE.Vector3(0, 0.15, 0));
+      const L = 0.3;
+      const d = hip.clone().sub(ankle);
+      const len = Math.min(d.length(), 2 * L - 0.001);
+      const mid = ankle.clone().addScaledVector(d.normalize(), len / 2);
+      const bendDir = fwd.clone().addScaledVector(d, -fwd.dot(d)).normalize();
+      bendDir.x += side * this.kneeOut;
+      bendDir.normalize();
+      const knee = mid.addScaledVector(bendDir, Math.sqrt(L * L - (len / 2) ** 2));
+      this.thighs[i].set(knee, hip);
+      this.shins[i].set(ankle, knee);
+      this.knees[i].position.copy(knee);
+      this.cuffs[i].position.copy(ankle).add(new THREE.Vector3(0, 0.02, 0));
+    }
+    if (sitting) {
+      this.#grip(this.armL, this.seat.grips[0], 1);
+      this.#grip(this.armR, this.seat.grips[1], -1);
+    }
+
+    // Crash tumble.
+    this.body.rotation.x = p.tumble;
+
+    const walking = this.locomotion === 'walk';
+    const targetYaw = walking || sitting ? Math.PI : Math.PI / 2;
+    this.body.rotation.y += (targetYaw - this.body.rotation.y) * Math.min(1, dt / 0.08);
+    if (walking || sitting) { this.edge.rotation.z = 0; this.body.rotation.x = 0; }
+    this.model?.update(dt, this, this.locomotion, s.speed || 0);
+  }
+
+  // On the board: edged over by `lean`, crouched, arms out for balance.
+  #carve(p) {
     this.edge.rotation.z = p.lean; // roll about the travel axis
     const c = Math.min(1, p.crouch + p.air * 0.35);
 
@@ -351,26 +421,6 @@ export class Rider {
     this.torso.rotation.set(0.45 + c * 0.45, 0.25 + p.twist * 0.25, 0);
     this.head.rotation.set(-0.3 - c * 0.35, 0.55 - p.twist * 0.3, 0); // look down the nose
 
-    // Legs: two-bone IK from hip socket to ankle, knees driven forward.
-    const fwd = new THREE.Vector3(0, 0, 1);
-    for (let i = 0; i < 2; i++) {
-      const side = i === 0 ? 1 : -1;
-      const hip = new THREE.Vector3(0.12 * side, 0, 0).applyEuler(this.hips.rotation).add(this.hips.position);
-      const ankle = this.feet[i].position.clone().add(new THREE.Vector3(0, 0.15, 0));
-      const L = 0.3;
-      const d = hip.clone().sub(ankle);
-      const len = Math.min(d.length(), 2 * L - 0.001);
-      const mid = ankle.clone().addScaledVector(d.normalize(), len / 2);
-      const bendDir = fwd.clone().addScaledVector(d, -fwd.dot(d)).normalize();
-      bendDir.x += side * 0.12;
-      bendDir.normalize();
-      const knee = mid.addScaledVector(bendDir, Math.sqrt(L * L - (len / 2) ** 2));
-      this.thighs[i].set(knee, hip);
-      this.shins[i].set(ankle, knee);
-      this.knees[i].position.copy(knee);
-      this.cuffs[i].position.copy(ankle).add(new THREE.Vector3(0, 0.02, 0));
-    }
-
     // Arms out for balance, swinging with the edge change; tucked in the air.
     const sway = Math.sin(this.t * 2.1) * 0.05;
     const air = p.air;
@@ -379,14 +429,42 @@ export class Rider {
     L.el.rotation.set(-0.35, 0, 0.1);
     R.sh.rotation.set(-0.9 + p.lean * 0.5 - air * 0.4, 0, -0.75 + air * 0.2 - sway);
     R.el.rotation.set(-1.0 - air * 0.4, 0, -0.2);
+  }
 
-    // Crash tumble.
-    this.body.rotation.x = p.tumble;
+  // On a seat: hips on the cushion, feet on its footrests. The torso leans
+  // forward until the hands reach the grips, into a turn with `lean` (+ left)
+  // and a little toward the steering with `twist`; the head stays level.
+  #sit(p) {
+    const seat = this.seat;
+    const build = this.model?.build ?? CLASSIC_BUILD;
+    this.hips.position.copy(seat.hips);
+    this.hips.position.y += build.seat;
+    this.hips.rotation.set(0, 0, 0);
+    const fold = reachFold(build, this.hips.position, seat.grips[0]);
+    this.torso.rotation.set(fold, p.twist * 0.12, -p.lean);
+    this.head.rotation.set(-fold * 0.85, -p.twist * 0.15, p.lean * 0.6);
+    this.feet.forEach((f, i) => f.position.copy(seat.feet[i]));
+  }
 
-    const walking = this.locomotion === 'walk';
-    const targetYaw = walking ? Math.PI : Math.PI / 2;
-    this.body.rotation.y += (targetYaw - this.body.rotation.y) * Math.min(1, dt / 0.08);
-    if (walking) { this.edge.rotation.z = 0; this.body.rotation.x = 0; }
-    this.model?.update(dt, this, this.locomotion, s.speed || 0);
+  // Two-bone IK for a primitive arm: the mitt onto `target` (body frame), the
+  // elbow bent out to the side (`side`: 1 left, -1 right), down and back.
+  #grip(arm, target, side) {
+    this.body.updateMatrixWorld(true);
+    const sh = this.body.worldToLocal(arm.sh.getWorldPosition(new THREE.Vector3()));
+    const d = target.clone().sub(sh);
+    const len = Math.min(d.length(), UPPER_ARM + FOREARM - 1e-4);
+    d.normalize();
+    const along = (UPPER_ARM ** 2 - FOREARM ** 2 + len ** 2) / (2 * len);
+    const out = Math.sqrt(Math.max(0, UPPER_ARM ** 2 - along ** 2));
+    const bend = new THREE.Vector3(side * 0.8, -1, -0.4);
+    bend.addScaledVector(d, -bend.dot(d)).normalize();
+    const elbow = sh.clone().addScaledVector(d, along).addScaledVector(bend, out);
+    const hand = sh.clone().addScaledVector(d, len); // as far toward the target as the arm reaches
+    // Both segments hang along -y in their own frames: turn each from there, in
+    // its parent's frame (the torso's, then the upper arm's).
+    const q = this.hips.quaternion.clone().multiply(this.torso.quaternion).invert();
+    arm.sh.quaternion.setFromUnitVectors(DOWN, elbow.clone().sub(sh).normalize().applyQuaternion(q));
+    q.premultiply(arm.sh.quaternion.clone().invert());
+    arm.el.quaternion.setFromUnitVectors(DOWN, hand.sub(elbow).normalize().applyQuaternion(q));
   }
 }

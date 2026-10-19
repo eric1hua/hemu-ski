@@ -6,10 +6,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
 
+// `seat`: how high the Hips bone sits above a seat's cushion (metres), for the
+// thighs' thickness.
 export const RIDER_MODELS = {
-  male: { file: 'player.glb', height: 1.7 },
+  male: { file: 'player.glb', height: 1.7, seat: 0.16 },
   // Includes the cat ears: keep her body scale independent of the male's hat.
-  female: { file: 'female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb', height: 1.8 },
+  female: { file: 'female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb', height: 1.8, seat: 0.15 },
 };
 const BOARD_TOP = 0.025;
 const FADE = 0.25;
@@ -28,7 +30,8 @@ export function loadRiderModel(id = 'male') {
 // pose: the auto-rig gave the shoulders much of the chest and backpack, so
 // moving them would drag the torso along with the arms.
 const DRIVEN = ['Hips', 'Spine', 'Spine1', 'Head', 'LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm',
-  'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot'];
+  'LeftHand', 'RightHand', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot'];
+const FINGERS = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
 const DOWN = new THREE.Vector3(0, -1, 0);
 const FWD = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
@@ -58,8 +61,11 @@ export class RiderModel {
     // space (so a model-space rotation can be applied relative to the parent).
     this.bones = {};
     this.rest = [];
+    const byName = {};
     scene.traverse((bone) => {
-      if (bone.isBone) this.rest.push({ bone, p: bone.position.clone(), q: bone.quaternion.clone(), s: bone.scale.clone() });
+      if (!bone.isBone) return;
+      this.rest.push({ bone, p: bone.position.clone(), q: bone.quaternion.clone(), s: bone.scale.clone() });
+      byName[bone.name.replace(/^mixamorig:?/, '')] = bone;
     });
     // Keep mixer targets separate: PropertyMixer caches unchanged track values.
     // Fading on its target bones would leave a frozen clip stuck halfway.
@@ -103,6 +109,34 @@ export class RiderModel {
       Left: [pos('LeftForeArm').sub(pos('LeftArm')).normalize(), childDir(this.bones.LeftForeArm.bone, this.root)],
       Right: [pos('RightForeArm').sub(pos('RightArm')).normalize(), childDir(this.bones.RightForeArm.bone, this.root)],
     };
+
+    // Seated (on the snowmobile), the arms reach for the grips with two-bone IK,
+    // and the hands close round them.
+    const at = (bone) => this.root.worldToLocal(bone.getWorldPosition(new THREE.Vector3()));
+    this.upperArm = pos('LeftArm').distanceTo(pos('LeftForeArm'));
+    this.foreArm = pos('LeftForeArm').distanceTo(pos('LeftHand'));
+    // Wrist to the middle of the palm, where the grip goes.
+    this.palm = byName.LeftHandMiddle1 ? pos('LeftHand').distanceTo(at(byName.LeftHandMiddle1)) * 0.6 : 0;
+    // The rider's build, for Rider's seated pose (body units): as its CLASSIC_BUILD.
+    const S = this.scale;
+    this.build = {
+      seat: RIDER_MODELS[id].seat,
+      pivot: (pos('Spine').y - pos('Hips').y) * S,
+      shoulder: [Math.abs(pos('LeftArm').x - pos('Hips').x) * S, (pos('LeftArm').y - pos('Spine').y) * S],
+      reach: (this.upperArm + this.foreArm + this.palm) * S,
+    };
+    // Each finger joint curls about the axis across its finger, toward the palm
+    // (down, in the T-pose), kept in the joint's own frame.
+    this.fingers = [];
+    for (const side of ['Left', 'Right'])
+      for (const finger of FINGERS)
+        for (let j = 1; j <= 3; j++) {
+          const bone = byName[`${side}Hand${finger}${j}`], next = byName[`${side}Hand${finger}${j + 1}`];
+          if (!bone || !next) continue;
+          const axis = at(next).sub(at(bone)).normalize().cross(DOWN).normalize();
+          const boneQ = rootQinv.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()));
+          this.fingers.push({ bone, axis: axis.applyQuaternion(boneQ.invert()), angle: finger === 'Thumb' ? 0.45 : 1.0 });
+        }
   }
 
   update(dt, rider, mode, speed) {
@@ -129,7 +163,7 @@ export class RiderModel {
       for (const { bone, p, q, s } of this.rest) {
         bone.position.copy(p); bone.quaternion.copy(q); bone.scale.copy(s);
       }
-      this.apply(rider);
+      this.apply(rider, mode);
     }
     this.fade = Math.min(FADE, this.fade + dt);
     if (this.transition) {
@@ -173,7 +207,8 @@ export class RiderModel {
     return out.copy(p).sub(this.root.position).divideScalar(this.scale);
   }
 
-  apply(rider) {
+  apply(rider, mode = 'ride') {
+    const sitting = mode === 'sit';
     for (const b of Object.values(this.bones)) {
       b.bone.quaternion.copy(b.q);
       b.bone.position.copy(b.p);
@@ -188,13 +223,14 @@ export class RiderModel {
 
     // Torso fold split over two spine bones; head counter-tilts down the nose.
     const t = rider.torso.rotation;
-    this.#turn('Spine', _q.setFromEuler(_e.set(t.x * 0.5, t.y, 0)));
-    this.#turn('Spine1', _q.setFromEuler(_e.set(t.x * 0.5, 0, 0)));
+    this.#turn('Spine', _q.setFromEuler(_e.set(t.x * 0.5, t.y, t.z * 0.5)));
+    this.#turn('Spine1', _q.setFromEuler(_e.set(t.x * 0.5, 0, t.z * 0.5)));
     this.#turn('Head', _q.setFromEuler(rider.head.rotation));
 
+    if (sitting) this.#grip(rider.seat.grips);
     // Arms: the classic rider's arms hang along -y at rest; map that
     // shoulder/elbow rotation onto the T-posed Mixamo arms.
-    for (const [side, arm] of [['Left', rider.armL], ['Right', rider.armR]]) {
+    else for (const [side, arm] of [['Left', rider.armL], ['Right', rider.armR]]) {
       const [upperBind, foreBind] = this.armDir[side];
       const upper = _a.copy(DOWN).applyEuler(arm.sh.rotation);
       const dUpper = new THREE.Quaternion().setFromUnitVectors(upperBind, upper);
@@ -209,9 +245,10 @@ export class RiderModel {
     for (const [i, side, sign] of [[0, 'Left', 1], [1, 'Right', -1]]) {
       const foot = rider.feet[i].position;
       // The bindings sit on the deck, as the T-posed soles do, so the ankle
-      // keeps its bind height; only its spot along the board changes.
+      // keeps its bind height; only its spot along the board changes. A
+      // footrest above the deck lifts it by as much.
       const ankle = this.#fromBody(_w.copy(foot), new THREE.Vector3());
-      ankle.y = this.ankle.y;
+      ankle.y = this.ankle.y + (foot.y - BOARD_TOP) / this.scale;
       ankle.z += this.ankle.z;
       const hip = this.#modelPos(side + 'UpLeg', new THREE.Vector3());
       const d = ankle.clone().sub(hip);
@@ -220,7 +257,7 @@ export class RiderModel {
       const along = (this.thigh ** 2 - this.shin ** 2 + len ** 2) / (2 * len);
       const up = Math.sqrt(Math.max(0, this.thigh ** 2 - along ** 2));
       const bend = FWD.clone().addScaledVector(d, -FWD.dot(d));
-      bend.x += sign * 0.12; // knees track slightly outward
+      bend.x += sign * (rider.kneeOut ?? 0.12); // knees track slightly outward
       bend.normalize();
       const knee = hip.clone().addScaledVector(d, along).addScaledVector(bend, up);
 
@@ -235,6 +272,33 @@ export class RiderModel {
       f.bone.quaternion.copy(parentQ.invert().multiply(rootQ).multiply(f.modelQ));
       f.bone.updateMatrixWorld(true);
     }
+  }
+
+  // Seated: each hand onto its grip (body frame), the palm on the bar and the
+  // fingers round it, the elbows bent out, down and back.
+  #grip(grips) {
+    this.root.updateMatrixWorld(true);
+    for (const [i, side, sign] of [[0, 'Left', 1], [1, 'Right', -1]]) {
+      const grip = this.#fromBody(grips[i], new THREE.Vector3());
+      const sh = this.#modelPos(side + 'Arm', new THREE.Vector3());
+      // The wrist, a palm's length back from the grip toward the shoulder and a
+      // little above it.
+      const wrist = grip.clone().addScaledVector(sh.clone().sub(grip).normalize(), this.palm);
+      wrist.y += this.palm * 0.5;
+      const d = wrist.clone().sub(sh);
+      const len = Math.min(d.length(), this.upperArm + this.foreArm - 1e-4);
+      d.normalize();
+      const along = (this.upperArm ** 2 - this.foreArm ** 2 + len ** 2) / (2 * len);
+      const out = Math.sqrt(Math.max(0, this.upperArm ** 2 - along ** 2));
+      const bend = new THREE.Vector3(sign * 0.8, -1, -0.4);
+      bend.addScaledVector(d, -bend.dot(d)).normalize();
+      const elbow = sh.clone().addScaledVector(d, along).addScaledVector(bend, out);
+
+      this.#aim(side + 'Arm', sh, this.#modelPos(side + 'ForeArm', new THREE.Vector3()), elbow.clone().sub(sh).normalize());
+      const elbowNow = this.#modelPos(side + 'ForeArm', new THREE.Vector3());
+      this.#aim(side + 'ForeArm', elbowNow, this.#modelPos(side + 'Hand', new THREE.Vector3()), wrist.clone().sub(elbowNow).normalize());
+    }
+    for (const { bone, axis, angle } of this.fingers) bone.quaternion.multiply(_q.setFromAxisAngle(axis, angle));
   }
 }
 

@@ -1,5 +1,5 @@
 // Procedural sound: wind that rises with speed, a scrape for edge/skid, and the
-// pickup's engine.
+// engine of the pickup or the snowmobile.
 // Effects and music play through their own buses, switched from the menu.
 export class Sound {
   constructor() {
@@ -66,7 +66,9 @@ export class Sound {
     this.musicOn = on;
     if (this.ctx) this.music.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.05);
   }
-  // `engine` ({ speed, throttle }) while you drive the pickup, else null.
+  // `engine` ({ kind, speed, throttle }) while you drive, else null. The
+  // pickup's note climbs through its gears; the snowmobile's two-stroke buzzes
+  // higher, its belt drive holding the revs up as it gathers speed.
   update(speed, slip, grounded, engine = null) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -75,13 +77,21 @@ export class Sound {
     this.windF.frequency.setTargetAtTime(300 + w * 900, t, 0.2);
     const s = grounded ? Math.min(1, slip / 6) * Math.min(1, speed / 5) : 0;
     this.scrapeG.gain.setTargetAtTime(grounded ? 0.015 + s * 0.12 : 0, t, 0.05);
-    // Revs climb through each gear (every 7 m/s) and drop back at the shift.
-    const gear = engine ? Math.min(4, Math.floor(engine.speed / 7)) : 0;
-    const rev = engine ? Math.min(1.1, (engine.speed - gear * 7) / 7 * (gear ? 0.65 : 1) + (gear ? 0.35 : 0)) : 0;
     const load = engine?.throttle ? 1 : 0;
-    const hz = 34 + rev * 52 + load * 6;
+    let hz, open;
+    if (engine?.kind === 'snowmobile') {
+      const rev = load * 0.45 + 0.15 + Math.min(1, engine.speed / 55) * 0.4;
+      hz = 58 + rev * 120;
+      open = 380 + rev * 900 + load * 300;
+    } else {
+      // Revs climb through each gear (every 7 m/s) and drop back at the shift.
+      const gear = engine ? Math.min(4, Math.floor(engine.speed / 7)) : 0;
+      const rev = engine ? Math.min(1.1, (engine.speed - gear * 7) / 7 * (gear ? 0.65 : 1) + (gear ? 0.35 : 0)) : 0;
+      hz = 34 + rev * 52 + load * 6;
+      open = 220 + rev * 260 + load * 420;
+    }
     this.eng.forEach((o, i) => o.frequency.setTargetAtTime(i ? hz / 2 : hz, t, 0.08));
-    this.engF.frequency.setTargetAtTime(220 + rev * 260 + load * 420, t, 0.08);
+    this.engF.frequency.setTargetAtTime(open, t, 0.08);
     this.engG.gain.setTargetAtTime(engine ? 0.05 + load * 0.05 : 0, t, engine ? 0.1 : 0.3);
   }
 }

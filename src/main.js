@@ -10,7 +10,8 @@ import { Rider } from './player/rider.js';
 import { BoardPhysics } from './player/physics.js';
 import { Trail, Spray } from './player/fx.js';
 import { Truck } from './vehicle/truck.js';
-import { TruckPhysics } from './vehicle/physics.js';
+import { Snowmobile } from './vehicle/snowmobile.js';
+import { VehiclePhysics, PICKUP, SNOWMOBILE } from './vehicle/physics.js';
 import { Hud } from './hud.js';
 import { BigMap } from './bigmap.js';
 import { Navigator } from './gps/navigator.js';
@@ -153,32 +154,57 @@ const gpsFrom = () => ({ x: phys.pos.x, z: phys.pos.z, y: phys.pos.y, lift: stat
 const marks = new RouteMarks(detail);
 scene.add(marks.group);
 
-// ---------- Pickup ----------
-// A pickup truck, parked for now in front of the East Service Centre, nose out.
-// Any rider can drive it: E beside it gets in, E again gets out (see Driving).
-const truck = new Truck();
-scene.add(truck.root);
-const truckHall = SERVICE_CENTRES.find((c) => c.id === 'east');
-const truckPark = (() => {
-  const c = truckHall, yaw = Math.atan2(c.faceTo[0] - c.x, c.faceTo[1] - c.z);
-  const along = -16, out = 33; // metres along the hall's front and out from its middle
+// ---------- Vehicles ----------
+// Parked for now in front of the East Service Centre, nose out: a pickup to the
+// left of the entrance and a snowmobile to the right. Any rider can take
+// either: E beside it gets in (or on), E again gets out (see Driving). In the
+// pickup the rider is out of sight in the cab; on the snowmobile they sit on
+// it, hands on the grips.
+const eastHall = SERVICE_CENTRES.find((c) => c.id === 'east');
+// `along` metres along a hall's front from its middle and `out` from it, facing out.
+function inFrontOf(c, along, out) {
+  const yaw = Math.atan2(c.faceTo[0] - c.x, c.faceTo[1] - c.z);
   const cos = Math.cos(yaw), sin = Math.sin(yaw);
   return { x: c.x + along * cos + out * sin, z: c.z - along * sin + out * cos, dx: sin, dz: cos };
-})();
-let drive = null; // the truck's physics, once the model is in
-truck.ready.then(() => {
-  drive = new TruckPhysics({
-    hf: detail, piste, forest, dims: truck.dims,
-    obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)],
-  });
-  drive.reset(truckPark.x, truckPark.z, yawOf(truckPark.dx, truckPark.dz));
-  truck.update(0, drive);
-  phys.obstacles.push(truck.footprint); // the rider runs into it
-  hud.truck = truck.footprint;
-}).catch((err) => console.warn('The pickup failed to load; it stays out of the game.', err));
-// Tyre tracks in the snow, one per rear wheel.
-const tracks = [new Trail(), new Trail()];
-scene.add(...tracks.map((t) => t.mesh));
+}
+// `cam`: the chase camera's distance back, height and look-ahead, and the
+// height it looks at; `wind`: how much of the wind you hear.
+const vehicles = [
+  {
+    name: 'pickup', model: new Truck(), handling: PICKUP, hall: eastHall, park: inFrontOf(eastHall, -16, 33),
+    cam: { back: 9, up: 3.4, ahead: 5, look: 1.4 }, wind: 0.5, // muffled by the cab
+    title: 'Pickup', prompt: '<kbd>E</kbd> drive the <b>pickup</b>',
+    hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get out',
+  },
+  {
+    name: 'snowmobile', model: new Snowmobile(), handling: SNOWMOBILE, hall: eastHall, park: inFrontOf(eastHall, 28, 31),
+    cam: { back: 5.6, up: 2.4, ahead: 4, look: 1.1 }, wind: 1,
+    title: 'Snowmobile', prompt: '<kbd>E</kbd> ride the <b>snowmobile</b>',
+    hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ride · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get off',
+  },
+];
+const parked = () => vehicles.filter((v) => v.phys && v !== car).map((v) => v.model.footprint);
+for (const v of vehicles) {
+  scene.add(v.model.root);
+  v.phys = null; // once the model is in
+  // Its lines in the snow: a pickup's rear tyres, a snowmobile's track and skis.
+  v.tracks = [];
+  v.model.ready.then(() => {
+    v.phys = new VehiclePhysics({
+      hf: detail, piste, forest, dims: v.model.dims, handling: v.handling,
+      obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)],
+    });
+    v.phys.reset(v.park.x, v.park.z, yawOf(v.park.dx, v.park.dz));
+    v.model.update(0, v.phys);
+    v.tracks = v.model.marks.map(() => new Trail());
+    scene.add(...v.tracks.map((t) => t.mesh));
+    phys.obstacles.push(v.model.footprint); // the rider runs into it
+    // The vehicles bump into each other.
+    for (const o of vehicles) if (o !== v && o.phys) { o.phys.obstacles.push(v.model.footprint); v.phys.obstacles.push(o.model.footprint); }
+    hud.parked = parked();
+  }).catch((err) => console.warn(`The ${v.name} failed to load; it stays out of the game.`, err));
+}
+let car = null; // the vehicle you're in or on
 const bigMap = new BigMap({
   hud, detail, runs: meta.runs, lifts: rides, lines: meta.lifts, gps, onClose: closeMap,
   onDiorama: () => leaveFor(dioramaHref('you'), 'Finding you on the diorama'),
@@ -203,11 +229,11 @@ window.addEventListener('keydown', (e) => {
   if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
   if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
   if (e.code === 'KeyR' && state === 'ride') startRun();
-  if (e.code === 'KeyR' && !e.repeat && state === 'drive') truckHome();
+  if (e.code === 'KeyR' && !e.repeat && state === 'drive') carHome();
   if (e.code === 'KeyF' && !e.repeat && state === 'ride') toggleLocomotion();
   if (e.code === 'KeyM' && !e.repeat) openMap();
   if (e.code === 'KeyE' && !e.repeat && state === 'drive') getOut();
-  else if (e.code === 'KeyE' && !e.repeat && state === 'ride' && byTruck) getIn();
+  else if (e.code === 'KeyE' && !e.repeat && state === 'ride' && nearCar) getIn(nearCar);
   else if (e.code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((e.code === 'KeyE' || e.code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
   if ((e.code === 'Enter' || e.code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
@@ -216,7 +242,7 @@ window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 window.addEventListener('focusin', (e) => { if (isControl(e.target)) keys.clear(); });
 const input = { steer: 0, tuck: false, brake: false, jump: false, walk: false, run: false };
-const pedals = { throttle: false, reverse: false, steer: 0, handbrake: false }; // in the truck
+const pedals = { throttle: false, reverse: false, steer: 0, handbrake: false }; // driving
 function readInput() {
   const L = keys.has('KeyA') || keys.has('ArrowLeft');
   const R = keys.has('KeyD') || keys.has('ArrowRight');
@@ -232,7 +258,10 @@ function readInput() {
   pedals.handbrake = input.jump;
 }
 
+// Back on the board. A rider seated on the snowmobile stays there; getting off
+// stands them up (see Driving).
 function restoreRide() {
+  if (rider.locomotion === 'sit') return;
   const wasWalking = rider.locomotion === 'walk';
   rider.setLocomotion('ride');
   if (wasWalking) {
@@ -348,7 +377,7 @@ const introPanel = () => showPanel('Hemu · 禾木', `
     <span><kbd>W</kbd></span><span>tuck for speed · push along on the flat</span>
     <span><kbd>S</kbd></span><span>skid to scrub speed</span>
     <span><kbd>Space</kbd></span><span>hold and release to ollie · spin in the air</span>
-    <span><kbd>E</kbd></span><span>board a lift at its station · get in or out of the pickup</span>
+    <span><kbd>E</kbd></span><span>board a lift at its station · take the pickup or the snowmobile</span>
     <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose under Rider</span>
     <span><kbd>W</kbd><kbd>Shift</kbd></span><span>walk / run on foot · A/D turn · S stop</span>
     <span><kbd>R</kbd></span><span>back to the top</span>
@@ -547,9 +576,10 @@ function poseRider(dt, snap = false) {
   _x.crossVectors(_f, _up);
   _m.makeBasis(_x, _up, _w.copy(_f).negate());
   _q.setFromRotationMatrix(_m);
-  if (walking || snap) rider.root.quaternion.copy(_q);
+  if (walking || snap || hop) rider.root.quaternion.copy(_q);
   else rider.root.quaternion.slerp(_q, 1 - Math.exp(-dt * 14));
   rider.root.position.copy(phys.pos);
+  if (hop) hopping(dt);
 
   const sp = phys.speed;
   let lean = Math.atan2(sp * phys.yawRate, G);
@@ -615,6 +645,7 @@ function frame() {
     hud.update(phys, elapsed);
     sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded && rider.locomotion !== 'walk');
   } else if (state === 'drive') {
+    const drive = car.phys;
     acc += dt;
     while (acc >= STEP) {
       drive.step(STEP, pedals);
@@ -622,14 +653,16 @@ function frame() {
     }
     for (const ev of drive.events.splice(0))
       if (ev.type === 'crash') hud.toast(ev.reason === 'tree' ? 'Tree!' : 'Crunch!');
-    truck.update(dt, drive);
-    followTruck();
+    car.model.update(dt, drive);
+    followCar();
+    if (car.model.saddle) poseSeated(dt);
     layTracks();
     if (timing) elapsed += dt;
     updateDriveCamera(dt);
     hud.update(phys, elapsed);
-    // Wind muffled by the cab; the engine note climbs through the gears.
-    sound.update(drive.speed * 0.5, 0, false, { speed: Math.abs(drive.vel.dot(drive.forward(_f))), throttle: pedals.throttle || pedals.reverse });
+    sound.update(drive.speed * car.wind, 0, false, {
+      kind: car.name, speed: Math.abs(drive.vel.dot(drive.forward(_f))), throttle: pedals.throttle || pedals.reverse,
+    });
   } else if (state === 'lift') {
     const label = `${liftRide.ride.label} ↑`;
     updateLift(dt); // may step you off at the top
@@ -705,10 +738,17 @@ function respawnInPlace() {
 }
 
 // ---------- Lifts ----------
-let boardable = null, atHall = null, byTruck = false;
+let boardable = null, atHall = null, nearCar = null;
 function updateBoarding() {
   boardable = null;
-  byTruck = !!drive && phys.crashed <= 0 && phys.grounded && boxGap(truck.footprint, phys.pos.x, phys.pos.z) < 2.5;
+  nearCar = null;
+  if (phys.crashed <= 0 && phys.grounded) {
+    let bestD = 2.5;
+    for (const v of vehicles) {
+      const d = v.phys ? boxGap(v.model.footprint, phys.pos.x, phys.pos.z) : Infinity;
+      if (d < bestD) { bestD = d; nearCar = v; }
+    }
+  }
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = Infinity;
     for (const s of boardSpots) {
@@ -719,7 +759,7 @@ function updateBoarding() {
   const hall = boardable?.hall ?? null;
   if (hall && hall !== atHall) hud.toast(hall.zh, 2200);
   atHall = hall;
-  hud.prompt(byTruck ? '<kbd>E</kbd> drive the <b>pickup</b>'
+  hud.prompt(nearCar ? nearCar.prompt
     : boardable ? `${hall ? `${hall.en} · ` : ''}<kbd>E</kbd> ride <b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`
     : !timing && spawn.hint ? spawn.hint : '');
 }
@@ -817,76 +857,111 @@ function facing(at, or) {
 }
 
 // ---------- Driving ----------
-// E beside the pickup gets in: the rider climbs in out of sight and the camera
-// swings round behind the truck. W drives, S brakes and then reverses, A/D
-// steer, Space is the handbrake, R takes the truck back to its spot by the
-// hall. E gets out at the driver's door (or the nearest clear side), on foot
-// if you walked up, and the truck stays parked where you left it.
-// While you drive, `phys` follows the truck, so the HUD, the GPS, the maps and
-// the diorama's "You" pin all see you where it is.
-const DRIVE_HINT = '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get out';
-let walkAfter = false; // walked up to the truck, so walk away from it
-function getIn() {
+// E beside a vehicle gets in: into the pickup's cab, out of sight, or onto the
+// snowmobile's seat, and the camera swings round behind it. W drives, S brakes
+// and then reverses, A/D steer, Space is the handbrake, R takes it back to its
+// spot by the hall. E gets out at the driver's door (or the nearest clear
+// side), on foot if you walked up, and the vehicle stays where you left it.
+// While you drive, `phys` follows the vehicle, so the HUD, the GPS, the maps
+// and the diorama's "You" pin all see you where it is.
+let walkAfter = false; // walked up to it, so walk away from it
+function getIn(v) {
   walkAfter = rider.locomotion === 'walk';
   restoreRide();
+  car = v;
   state = 'drive';
-  rider.root.visible = false;
-  hud.truck = null; // you're the arrow now
+  if (v.model.saddle) {
+    startHop();
+    rider.setLocomotion('sit', v.model.seat);
+  } else rider.root.visible = false;
+  hud.parked = parked(); // you're the arrow now
   trail.gap(phys.pos);
-  for (const t of tracks) t.gap(drive.pos);
+  for (const t of v.tracks) t.gap(v.phys.pos);
   acc = 0;
-  hud.prompt(DRIVE_HINT);
-  hud.toast('Pickup', 1600);
+  hud.prompt(v.hint);
+  hud.toast(v.title, 1600);
 }
 function getOut() {
-  const at = doorSpot();
+  const drive = car.phys, at = exitSpot();
   drive.vel.set(0, 0, 0);
   drive.yawRate = drive.accel = drive.lateral = 0;
   state = 'ride';
   phys.reset(at.x, at.z, drive.yaw);
-  if (walkAfter) rider.setLocomotion('walk');
+  if (car.model.saddle) startHop();
+  rider.setLocomotion(walkAfter ? 'walk' : 'ride');
   rider.root.visible = true;
   poseRider(0, true);
-  hud.truck = truck.footprint;
+  car = null;
+  hud.parked = parked();
   hud.prompt('');
   trail.gap(phys.pos);
 }
-// Beside the driver's door (the left: they drive on the right here), or else
-// the other door, behind or in front; the first that's clear.
-function doorSpot() {
-  const f = drive.forward(_f), l = drive.left(_x), d = truck.dims;
-  const spots = [[0.4, d.halfWidth + 0.9], [0.4, -d.halfWidth - 0.9], [-d.halfLength - 1.2, 0], [d.halfLength + 1.2, 0]]
-    .map(([a, b]) => ({ x: drive.pos.x + f.x * a + l.x * b, z: drive.pos.z + f.z * a + l.z * b }));
+// The first of the vehicle's exits that's clear: the driver's side first.
+function exitSpot() {
+  const drive = car.phys, f = drive.forward(_f), l = drive.left(_x);
+  const spots = car.model.exits.map(({ along, left }) => ({ x: drive.pos.x + f.x * along + l.x * left, z: drive.pos.z + f.z * along + l.z * left }));
   return spots.find(({ x, z }) => detail.inside(x, z, 60) && !detail.holeAt(x, z) && !forest.hit(x, z, 0.6)
     && phys.obstacles.every((o) => boxGap(o, x, z) > 0.6)) ?? spots[0];
 }
-function followTruck() {
-  phys.pos.copy(drive.pos);
-  phys.vel.copy(drive.vel);
-  phys.yaw = drive.yaw;
+function followCar() {
+  phys.pos.copy(car.phys.pos);
+  phys.vel.copy(car.phys.vel);
+  phys.yaw = car.phys.yaw;
 }
 // Back to its spot by the hall, with you still at the wheel.
-function truckHome() {
-  drive.reset(truckPark.x, truckPark.z, yawOf(truckPark.dx, truckPark.dz));
-  truck.update(0, drive);
-  followTruck();
-  for (const t of tracks) t.gap(drive.pos);
-  camDir.set(truckPark.dx, 0, truckPark.dz);
+function carHome() {
+  const { park } = car;
+  car.phys.reset(park.x, park.z, yawOf(park.dx, park.dz));
+  car.model.update(0, car.phys);
+  followCar();
+  for (const t of car.tracks) t.gap(car.phys.pos);
+  camDir.set(park.dx, 0, park.dz);
   driveCameraTarget(camera.position, camLook);
   camera.lookAt(camLook);
-  hud.toast(truckHall.zh, 2000);
+  hud.toast(car.hall.zh, 2000);
+}
+// On the snowmobile: the rider's root follows its saddle, and they lean into
+// the turn and a little toward the steering (see Rider's seated pose).
+const _hs = new THREE.Vector3();
+function poseSeated(dt) {
+  const { saddle } = car.model;
+  saddle.updateWorldMatrix(true, false);
+  saddle.matrixWorld.decompose(rider.root.position, rider.root.quaternion, _hs);
+  if (hop) hopping(dt);
+  rider.update(dt, {
+    crouch: 0, air: false, speed: car.phys.speed,
+    lean: THREE.MathUtils.clamp(car.phys.lateral * 0.04, -0.45, 0.45),
+    twist: car.phys.steer / car.handling.steer,
+  });
+}
+// Getting on or off the snowmobile, the rider slides from where they were to
+// where they're going, while their pose blends from standing to sitting (or back).
+const HOP = 0.35;
+let hop = null;
+const _hq = new THREE.Quaternion();
+function startHop() {
+  hop = { t: 0, pos: rider.root.position.clone(), quat: rider.root.quaternion.clone() };
+}
+function hopping(dt) {
+  hop.t += dt;
+  const k = THREE.MathUtils.smootherstep(hop.t, 0, HOP);
+  rider.root.position.lerpVectors(hop.pos, rider.root.position, k);
+  rider.root.quaternion.slerpQuaternions(hop.quat, _hq.copy(rider.root.quaternion), k);
+  if (hop.t >= HOP) hop = null;
 }
 // Chase camera: behind and above, pulling back with speed; it stays behind the
-// tailgate when you reverse.
+// tail when you reverse.
 function driveCameraTarget(out, look) {
+  const drive = car.phys, { cam } = car;
   const sp = Math.min(drive.speed, 30);
-  out.copy(drive.pos).addScaledVector(camDir, -(9 + sp * 0.08));
-  out.y += 3.4 + sp * 0.02;
+  out.copy(drive.pos).addScaledVector(camDir, -(cam.back + sp * 0.08));
+  out.y += cam.up + sp * 0.02;
   out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 1.5);
-  look.copy(drive.pos).addScaledVector(camDir, 5);
-  look.y += 1.4;
+  look.copy(drive.pos).addScaledVector(camDir, cam.ahead);
+  look.y += cam.look;
 }
 function updateDriveCamera(dt) {
+  const drive = car.phys;
   camDir.lerp(drive.forward(_v), 1 - Math.exp(-dt * 3)).normalize();
   driveCameraTarget(_w, _look);
   camera.position.lerp(_w, 1 - Math.exp(-dt * 6));
@@ -897,12 +972,11 @@ function updateDriveCamera(dt) {
   camera.updateProjectionMatrix();
 }
 function layTracks() {
-  const f = drive.forward(_f), l = drive.left(_x), d = truck.dims;
-  tracks.forEach((t, i) => {
-    const s = i ? 1 : -1;
-    _sv.set(drive.pos.x - f.x * d.wheelbase / 2 + l.x * s * d.track / 2, 0, drive.pos.z - f.z * d.wheelbase / 2 + l.z * s * d.track / 2);
+  const drive = car.phys, f = drive.forward(_f), l = drive.left(_x);
+  car.model.marks.forEach(({ along, left, width }, i) => {
+    _sv.set(drive.pos.x + f.x * along + l.x * left, 0, drive.pos.z + f.z * along + l.z * left);
     _sv.y = detail.heightAt(_sv.x, _sv.z);
-    t.add(_sv, l, 0.4);
+    car.tracks[i].add(_sv, l, width);
   });
 }
 // How far (x, z) is outside a rotated box { x, z, yaw, hw, hd }; 0 inside it.
@@ -1124,5 +1198,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, truck, getIn, getOut, truckPark, get drive() { return drive; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

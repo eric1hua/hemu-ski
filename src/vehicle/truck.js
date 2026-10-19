@@ -21,7 +21,11 @@ export class Truck {
     // Filled in from the model: wheelbase, track, wheel radius, half-extents.
     this.dims = null;
     // A rotated box { x, z, yaw, hw, hd } for the rider's collisions; it moves with the truck.
-    this.footprint = { x: 0, z: 0, yaw: 0, hw: 0, hd: 0 };
+    this.footprint = { kind: 'pickup', x: 0, z: 0, yaw: 0, hw: 0, hd: 0 };
+    // Tyre tracks, one per rear wheel, and where you get out: { along, left } from
+    // the middle, the driver's door first.
+    this.marks = [];
+    this.exits = [];
     this.ready = new GLTFLoader().loadAsync(FILE).then((gltf) => this.#build(gltf));
     this.lean = { pitch: 0, roll: 0, vp: 0, vr: 0 };
   }
@@ -79,6 +83,12 @@ export class Truck {
     for (const w of this.wheels) w.steer.position.z -= this.dims.axleZ;
     this.footprint.hw = this.dims.halfWidth;
     this.footprint.hd = this.dims.halfLength;
+    const d = this.dims;
+    this.marks = [-1, 1].map((side) => ({ along: -d.wheelbase / 2, left: side * d.track / 2, width: 0.4 }));
+    // Beside the driver's door (the left: they drive on the right here), or else
+    // the other door, behind or in front.
+    this.exits = [[0.4, d.halfWidth + 0.9], [0.4, -d.halfWidth - 0.9], [-d.halfLength - 1.2, 0], [d.halfLength + 1.2, 0]]
+      .map(([along, left]) => ({ along, left }));
     return this;
   }
 
@@ -87,14 +97,9 @@ export class Truck {
     this.root.position.copy(p.pos);
     this.root.quaternion.copy(p.quat);
     // The body pitches back as you pull away, dives under braking and rolls out
-    // of a turn: a damped spring toward a lean from the acceleration.
+    // of a turn.
     const L = this.lean;
-    const tp = THREE.MathUtils.clamp(-p.accel * 0.006, -0.06, 0.06);
-    const tr = THREE.MathUtils.clamp(p.lateral * 0.008, -0.07, 0.07);
-    L.vp += ((tp - L.pitch) * 90 - L.vp * 12) * dt;
-    L.vr += ((tr - L.roll) * 90 - L.vr * 12) * dt;
-    L.pitch += L.vp * dt;
-    L.roll += L.vr * dt;
+    springTo(L, dt, THREE.MathUtils.clamp(-p.accel * 0.006, -0.06, 0.06), THREE.MathUtils.clamp(p.lateral * 0.008, -0.07, 0.07));
     this.body.rotation.set(L.pitch, 0, L.roll);
     for (const w of this.wheels) {
       if (w.front) w.steer.rotation.y = p.steer;
@@ -104,6 +109,27 @@ export class Truck {
     this.footprint.z = p.pos.z;
     this.footprint.yaw = p.yaw;
   }
+}
+
+// A body's lean on its springs { pitch, roll, vp, vr }: a damped spring toward
+// `pitch` and `roll` (radians), from the acceleration.
+export function springTo(L, dt, pitch, roll) {
+  L.vp += ((pitch - L.pitch) * 90 - L.vp * 12) * dt;
+  L.vr += ((roll - L.roll) * 90 - L.vr * 12) * dt;
+  L.pitch += L.vp * dt;
+  L.roll += L.vr * dt;
+}
+
+// Part of a geometry: the triangles that start at `tris` in `index`, sharing
+// its vertex buffers.
+export function subsetGeometry(geo, index, tris) {
+  if (!tris.length) return null;
+  const g = new THREE.BufferGeometry();
+  for (const [name, attr] of Object.entries(geo.attributes)) g.setAttribute(name, attr);
+  const idx = new Uint32Array(tris.length * 3);
+  tris.forEach((t, i) => idx.set([index[t], index[t + 1], index[t + 2]], i * 3));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  return g;
 }
 
 // Splits the truck's geometry into the body and four wheels. The model is one
@@ -164,15 +190,7 @@ function splitWheels(geo) {
     else w.fixed.push(...c.tris);
   }
   // Each part indexes into the same vertex buffers.
-  const subset = (tris) => {
-    if (!tris.length) return null;
-    const g = new THREE.BufferGeometry();
-    for (const [name, attr] of Object.entries(geo.attributes)) g.setAttribute(name, attr);
-    const idx = new Uint32Array(tris.length * 3);
-    tris.forEach((t, i) => idx.set([index[t], index[t + 1], index[t + 2]], i * 3));
-    g.setIndex(new THREE.BufferAttribute(idx, 1));
-    return g;
-  };
+  const subset = (tris) => subsetGeometry(geo, index, tris);
   return {
     body: subset(body),
     wheels: wheels.map((w) => ({ centre: w.centre, spin: subset(w.spin), fixed: subset(w.fixed) })),
