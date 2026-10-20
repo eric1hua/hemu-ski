@@ -6,9 +6,12 @@
   --route: #9b5de5;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #8ccac4; }
-body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink); user-select: none; }
-#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #8ccac4; }
+body {
+  font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink); user-select: none;
+  -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
 #loading {
   position: fixed; inset: 0; display: grid; place-content: center; text-align: center;
@@ -86,6 +89,7 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 .panel .big { font-family: 'Patrick Hand SC', cursive; font-size: 40px; line-height: 1; margin: 4px 0 10px; }
 
 #hud { position: fixed; inset: 0; pointer-events: none; }
+#run-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #hud .run-tag {
   position: absolute; top: 18px; left: 18px; display: flex; align-items: center; gap: 10px;
   background: var(--paper); border: 2.5px solid var(--ink); padding: 4px 14px 4px 6px;
@@ -154,14 +158,17 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
   opacity: 0; transition: opacity 0.25s; white-space: nowrap;
 }
 #toast.show { opacity: 1; }
-/* Boarding prompt at a lift station, in the panel's paper style. */
+/* Boarding prompt at a lift station, in the panel's paper style. A prompt with
+   something to do (board, get in, skip) does it when it's tapped or clicked. */
 #prompt {
   position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%);
   background: var(--paper); border: 2.5px solid var(--ink); padding: 4px 16px 6px;
-  box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35); font-size: 22px; white-space: nowrap;
-  opacity: 0; transition: opacity 0.2s;
+  box-shadow: 4px 4px 0 rgba(35, 48, 58, 0.35); font: inherit; font-size: 22px; color: var(--ink); white-space: nowrap;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none;
 }
 #prompt.show { opacity: 1; }
+#prompt.show.tap { pointer-events: auto; cursor: pointer; }
+#prompt:disabled { color: var(--ink); }
 #prompt kbd {
   font-family: 'Patrick Hand SC', cursive; border: 2px solid var(--ink); border-radius: 5px;
   padding: 0 7px; margin: 0 3px; background: #fff;
@@ -237,6 +244,7 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 #menu .riders button:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
 #menu .riders button:focus-visible { outline: 3px solid var(--tab); outline-offset: 2px; }
 #menu .keys { font-size: 16px; line-height: 1.6; }
+#menu .touch-keys, #menu .toggle { display: none; }
 #menu kbd {
   font-family: 'Patrick Hand SC', cursive; border: 2px solid var(--ink); border-radius: 4px;
   padding: 0 5px; background: #fff;
@@ -343,7 +351,11 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
 @media (max-width: 640px) {
   #minimap { width: 120px; height: 120px; }
   #gps { top: 152px; width: min(240px, calc(100vw - 36px)); }
-  #bigmap .acts { margin-left: 0; }
+  /* The whole map runs the phone's width, its buttons under it. */
+  #bigmap { padding: calc(30px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom)); }
+  #bigmap .sheet { padding: 26px 10px 12px; }
+  #bigmap .frame { width: min(640px, calc(100vw - 41px), calc(100dvh - 330px)); }
+  #bigmap .acts { margin-left: 0; flex: 1 0 100%; flex-direction: column; }
   #hud .stats > div { min-width: 70px; padding: 2px 8px; }
   #hud .stats b { font-size: 22px; }
   .panel { font-size: 18px; }
@@ -361,3 +373,135 @@ body { font-family: 'Patrick Hand', 'Comic Sans MS', cursive; color: var(--ink);
   #bigmap .dest { flex: none; flex-wrap: wrap; }
   #bigmap .acts { margin-left: 0; flex-direction: column; }
 }
+
+/* ---------- Touch screens ----------
+   body.touch is touch mode (touch.js): on from a coarse pointer or the first
+   touch, off at the next key or mouse click. The stick and the buttons by the
+   right thumb take the bottom of the screen, so the HUD gathers at the top,
+   clear of the notch, and the menu folds behind one button in the corner. */
+#touch { position: fixed; inset: 0; pointer-events: none; -webkit-touch-callout: none; }
+#touch .zone { position: absolute; left: 0; bottom: 0; width: 62%; height: 48%; pointer-events: auto; touch-action: none; }
+/* At rest low on the left; while you touch, centred under the thumb (inline style). */
+#touch .stick {
+  position: absolute; left: calc(30px + env(safe-area-inset-left)); bottom: calc(48px + env(safe-area-inset-bottom));
+  width: 128px; height: 128px; box-sizing: border-box; border-radius: 50%; pointer-events: none;
+  background: rgba(251, 250, 245, 0.4); border: 2.5px solid rgba(35, 48, 58, 0.6); opacity: 0.7;
+}
+#touch .stick.live { opacity: 1; }
+#touch .stick svg {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  fill: none; stroke: rgba(35, 48, 58, 0.7); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+}
+#touch .stick i {
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px;
+  box-sizing: border-box; border-radius: 50%; background: var(--paper); border: 2.5px solid var(--ink);
+  box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
+/* The buttons hang off the bottom-right corner: the big one (Ollie, Handbrake,
+   Up, Board) in it, the action (E) above, On foot to its left. */
+#touch .pad {
+  position: absolute; right: calc(18px + env(safe-area-inset-right)); bottom: calc(52px + env(safe-area-inset-bottom));
+  width: 0; height: 0;
+}
+#touch .pad button {
+  position: absolute; right: 0; bottom: 0; width: 68px; height: 68px; padding: 0 0 3px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: 'Patrick Hand SC', cursive; font-size: 14px; letter-spacing: 0.5px; line-height: 1; color: var(--ink);
+  background: var(--paper); border: 2.5px solid var(--ink); box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
+  pointer-events: auto; touch-action: none; cursor: pointer;
+}
+#touch .pad button svg {
+  width: 26px; height: 26px; fill: none; stroke: var(--ink); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round;
+}
+#touch .pad .big, #touch .pad button.lit {
+  background: var(--accent); box-shadow: inset 0 -5px 0 #c99a2a, 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
+#touch .pad .big { width: 88px; height: 88px; font-size: 17px; }
+#touch .pad .big svg { width: 30px; height: 30px; }
+#touch .pad button.down { transform: translate(1px, 2px); box-shadow: inset 0 -3px 0 #c99a2a, 1px 1px 0 rgba(35, 48, 58, 0.35); }
+#touch .pad button.dim { opacity: 0.55; border-style: dashed; box-shadow: none; }
+#touch .pad .act { right: 10px; bottom: 104px; }
+#touch .pad .aux { right: 100px; bottom: 4px; width: 60px; height: 60px; font-size: 13px; }
+#touch .pad .low { width: 80px; height: 80px; font-size: 15px; }
+/* On foot, Board takes Ollie's place, in paper; in a vehicle the handbrake's
+   label is long; flying, Up stands over Down with the way out beside them; on
+   a lift only Skip shows, where Ollie was. */
+#touch[data-layout='walk'] .pad .big { background: var(--paper); box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35); }
+#touch[data-layout='drive'] .pad .big { font-size: 15px; }
+#touch[data-layout='fly'] .pad .big { right: 4px; bottom: 88px; width: 80px; height: 80px; font-size: 15px; }
+#touch[data-layout='fly'] .pad .act { right: 98px; bottom: 10px; width: 60px; height: 60px; font-size: 13px; }
+#touch[data-layout='lift'] .pad .act { right: 10px; bottom: 10px; }
+@media (orientation: landscape) {
+  #touch .zone { width: 50%; height: 78%; }
+  #touch .stick { left: calc(40px + env(safe-area-inset-left)); bottom: calc(24px + env(safe-area-inset-bottom)); }
+  #touch .pad { right: calc(28px + env(safe-area-inset-right)); bottom: calc(26px + env(safe-area-inset-bottom)); }
+}
+
+body.touch #hud .run-tag {
+  top: calc(14px + env(safe-area-inset-top)); left: calc(66px + env(safe-area-inset-left));
+  height: 44px; box-sizing: border-box; padding: 0 14px 2px 8px;
+  max-width: calc(100vw - 200px - env(safe-area-inset-left) - env(safe-area-inset-right));
+}
+body.touch #hud .stats {
+  left: calc(14px + env(safe-area-inset-left)); top: calc(66px + env(safe-area-inset-top)); bottom: auto; gap: 0;
+  background: var(--paper); border: 2.5px solid var(--ink); box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
+body.touch #hud .stats > div {
+  min-width: 0; padding: 2px 10px 4px; background: none; border: 0; border-right: 2px dashed rgba(35, 48, 58, 0.3); box-shadow: none;
+}
+body.touch #hud .stats > div:last-child { border-right: 0; }
+body.touch #hud .stats label { font-size: 12px; }
+body.touch #hud .stats b { font-size: 22px; }
+body.touch #hud .stats small { font-size: 12px; margin-left: 2px; }
+body.touch #minimap-open { top: calc(14px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); }
+body.touch #minimap { width: 104px; height: 104px; }
+body.touch #minimap-open::after { display: none; }
+body.touch #gps { top: calc(132px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); width: min(240px, calc(100vw - 28px)); }
+body.touch #toast { font-size: 36px; white-space: normal; width: max-content; max-width: calc(100vw - 32px); text-align: center; }
+/* The prompt sits over the rider, clear of the thumbs; on its side, between them. */
+body.touch #prompt {
+  top: 46%; bottom: auto; min-height: 44px; width: max-content; max-width: calc(100vw - 32px);
+  white-space: normal; text-align: center; font-size: 20px; line-height: 1.2; padding: 6px 16px 8px;
+}
+@media (orientation: landscape) {
+  body.touch #prompt { top: auto; bottom: calc(16px + env(safe-area-inset-bottom)); max-width: calc(100vw - 440px); font-size: 18px; }
+}
+
+body.touch #menu {
+  left: calc(14px + env(safe-area-inset-left)); top: calc(14px + env(safe-area-inset-top)); transform: none;
+  flex-direction: column; align-items: flex-start; gap: 12px; max-width: calc(100vw - 28px);
+}
+body.touch #menu .toggle {
+  display: grid; pointer-events: auto; border-width: 2.5px; background: var(--paper); box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
+body.touch #menu .toggle[aria-expanded='true'] { background: var(--accent); }
+body.touch #menu .rail { display: none; }
+body.touch #menu.expanded .rail { display: grid; grid-template-columns: repeat(4, 44px); gap: 8px; padding: 8px; }
+body.touch #menu hr { display: none; }
+body.touch .mi { width: 44px; height: 44px; }
+body.touch .mi svg { width: 26px; height: 26px; }
+body.touch .mi::after { display: none; }
+body.touch #menu .flyout { width: min(320px, calc(100vw - 28px)); margin-top: 16px; }
+body.touch #menu .keys:not(.touch-keys) { display: none; }
+body.touch #menu .touch-keys { display: block; }
+
+body.touch .panel {
+  bottom: calc(14px + env(safe-area-inset-bottom)); width: min(620px, calc(100vw - 28px));
+  padding: 28px 16px 16px; font-size: 18px;
+}
+body.touch .panel .body { max-height: calc(100dvh - 190px); overflow-y: auto; touch-action: pan-y; }
+.panel .next.wide {
+  position: static; display: block; width: 100%; height: 52px; margin-top: 12px; padding: 0 0 5px;
+  font-family: 'Patrick Hand SC', cursive; font-size: 24px; letter-spacing: 2px; color: var(--ink);
+  background: var(--accent); box-shadow: inset 0 -5px 0 #c99a2a, 3px 3px 0 rgba(35, 48, 58, 0.35);
+}
+.panel .moves { grid-template-columns: 52px 1fr; align-items: center; gap: 10px 12px; margin: 12px 0 10px; font-size: 16px; line-height: 1.25; }
+.panel .moves svg {
+  width: 52px; height: 52px; fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+}
+
+body.touch #bigmap .x { top: 0; right: 2px; width: 44px; height: 44px; font-size: 30px; }
+body.touch #bigmap .zoom { gap: 8px; }
+body.touch #bigmap .zoom button { width: 44px; height: 44px; }
+body.touch #bigmap .acts button { min-height: 48px; }
+body.touch #bigmap .dest .clear { min-height: 36px; }

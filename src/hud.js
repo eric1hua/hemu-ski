@@ -16,6 +16,10 @@ export class Hud {
     this.badge = $('run-badge');
     this.toastEl = $('toast');
     this.promptEl = $('prompt');
+    // A prompt with something to do (board, get in, skip) does it when tapped.
+    this.promptEl.addEventListener('mousedown', (e) => e.preventDefault()); // keep Space for the ollie
+    this.promptEl.addEventListener('click', () => this.promptAct?.());
+    this.touch = false; // touch mode: prompts in their touch wording
     this.map = $('minimap').getContext('2d');
     this.#prerenderMap();
     this.lastRun = null;
@@ -194,12 +198,26 @@ export class Hud {
     ctx.restore();
   }
 
-  // Persistent hint (HTML, e.g. with <kbd>); empty hides it.
-  prompt(html) {
-    if (html === this.lastPrompt) return;
+  // Persistent hint: `keys` (HTML, e.g. with <kbd>) for a keyboard, `touch` for
+  // a touch screen; empty hides it. With `act`, tapping or clicking it does that.
+  prompt(keys, touch = keys, act = null) {
+    this.promptKeys = keys;
+    this.promptTouch = touch;
+    this.promptAct = act;
+    const html = this.touch ? touch : keys;
+    if (html === this.lastPrompt && !!act === this.promptTap) return;
     this.lastPrompt = html;
+    this.promptTap = !!act;
     if (html) this.promptEl.innerHTML = html;
     this.promptEl.classList.toggle('show', !!html);
+    this.promptEl.classList.toggle('tap', !!act);
+    this.promptEl.disabled = !act;
+  }
+
+  // Touch mode on or off: the prompt showing switches wording.
+  setTouch(on) {
+    this.touch = on;
+    this.prompt(this.promptKeys ?? '', this.promptTouch ?? '', this.promptAct);
   }
 
   toast(text, ms = 1400) {

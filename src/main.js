@@ -20,6 +20,7 @@ import { Navigator } from './gps/navigator.js';
 import { RouteMarks } from './gps/marks.js';
 import { Sound } from './audio.js';
 import { createMenu } from './menu.js';
+import { TouchPad } from './touch.js';
 import { createIsland, createTitleLetters, createSnowSpecks, createCloudWipe } from './intro.js';
 import {
   destinationFromURL, destinationKey, runTop, noteArrival, takeArrivalNote, whereaboutsParam, saveWhereabouts,
@@ -175,19 +176,22 @@ function inFrontOf(c, along, out) {
 // right) and how quickly it follows (6 if it doesn't say: the faster the
 // vehicle, the further it trails); `wind`: how much of the wind you hear; `lean`: how far the rider
 // leans into a turn; `flies`: it's an aircraft, with `hintLanded` its hint on
-// the ground.
+// the ground; `touch`: its prompt and hints on a touch screen, and what the
+// button by your thumb says to get in and out.
 const vehicles = [
   {
     name: 'pickup', model: new Truck(), handling: PICKUP, hall: eastHall, park: inFrontOf(eastHall, -16, 33),
     cam: { back: 9, up: 3.4, ahead: 5, look: 1.4 }, wind: 0.5, // muffled by the cab
     title: 'Pickup', prompt: '<kbd>E</kbd> drive the <b>pickup</b>',
     hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get out',
+    touch: { prompt: 'Drive the <b>pickup</b> ▸', enter: 'Drive', exit: 'Get out', hint: 'Stick up to drive, down to brake · sideways to steer' },
   },
   {
     name: 'snowmobile', model: new Snowmobile(), handling: SNOWMOBILE, hall: eastHall, park: inFrontOf(eastHall, 28, 31),
     cam: { back: 5.6, up: 2.4, ahead: 4, look: 1.1 }, wind: 1,
     title: 'Snowmobile', prompt: '<kbd>E</kbd> ride the <b>snowmobile</b>',
     hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ride · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get off',
+    touch: { prompt: 'Ride the <b>snowmobile</b> ▸', enter: 'Ride', exit: 'Get off', hint: 'Stick up to ride, down to brake · sideways to steer' },
   },
   {
     name: 'jetson', model: new Jetson(), handling: JETSON, flies: true, hall: eastHall, park: inFrontOf(eastHall, 4, 52),
@@ -195,6 +199,10 @@ const vehicles = [
     title: 'Jetson ONE', prompt: '<kbd>E</kbd> fly the <b>Jetson ONE</b>',
     hintLanded: '<kbd>Space</kbd> take off · <kbd>E</kbd> get out',
     hint: '<kbd>W</kbd><kbd>S</kbd> fly · <kbd>A</kbd><kbd>D</kbd> turn · <kbd>Space</kbd> up · <kbd>Shift</kbd> down and land',
+    touch: {
+      prompt: 'Fly the <b>Jetson ONE</b> ▸', enter: 'Fly', exit: 'Get out',
+      hint: 'The stick flies and turns · hold Up to climb, Down to land', hintLanded: 'Hold Up to take off',
+    },
   },
 ];
 const parked = () => vehicles.filter((v) => v.phys && v !== car).map((v) => v.model.footprint);
@@ -240,42 +248,71 @@ window.addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   sound.start();
-  if ((e.code === 'Enter' || e.code === 'Space') && state === 'title') { begin(); return; }
-  if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
-  if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
-  if (e.code === 'KeyR' && state === 'ride') startRun();
-  if (e.code === 'KeyR' && !e.repeat && state === 'drive') carHome();
-  if (e.code === 'KeyF' && !e.repeat && state === 'ride') toggleLocomotion();
-  if (e.code === 'KeyM' && !e.repeat) openMap();
-  if (e.code === 'KeyE' && !e.repeat && state === 'drive') {
-    if (car.phys.canExit === false) hud.toast('Land first · hold Shift', 1600);
+  act(e.code, e.repeat);
+});
+// What a key press does, beyond the key being held. The touch buttons, the
+// prompt and the menu press keys through here too, so a tap does what the key does.
+function act(code, repeat = false) {
+  if ((code === 'Enter' || code === 'Space') && state === 'title') { begin(); return; }
+  if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
+  if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
+  if (code === 'KeyR' && state === 'ride') startRun();
+  if (code === 'KeyR' && !repeat && state === 'drive') carHome();
+  if (code === 'KeyF' && !repeat && state === 'ride') toggleLocomotion();
+  if (code === 'KeyM' && !repeat) openMap();
+  if (code === 'KeyE' && !repeat && state === 'drive') {
+    if (car.phys.canExit === false) hud.toast(touch.on ? 'Land first · hold Down' : 'Land first · hold Shift', 1600);
     else getOut();
   }
-  else if (e.code === 'KeyE' && !e.repeat && state === 'ride' && nearCar) getIn(nearCar);
-  else if (e.code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
-  else if ((e.code === 'KeyE' || e.code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
-  if ((e.code === 'Enter' || e.code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
-});
+  else if (code === 'KeyE' && !repeat && state === 'ride' && nearCar) getIn(nearCar);
+  else if (code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
+  else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
+  if ((code === 'Enter' || code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
+}
+const pressE = () => { sound.start(); act('KeyE'); }; // a tapped prompt
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 window.addEventListener('focusin', (e) => { if (isControl(e.target)) keys.clear(); });
+// A tap skips the flight down from the title and the drop out of the cloud, as Space does.
+canvas.addEventListener('pointerdown', () => {
+  if (state === 'swoop' || state === 'arrive') act('Space');
+});
+// The menu's way back to the start, for a touch screen as much as for R.
+document.getElementById('mi-restart').addEventListener('click', () => {
+  menu.close();
+  sound.start();
+  act('KeyR');
+});
+
+// Touch controls (touch.js): the stick and the held buttons are read with the
+// keys, below; a tapped button presses E (the one by your thumb: board, get in
+// or out, skip the ride) or F (on foot, or back on the board). What they show
+// follows what you're doing (see touchLayout).
+const touch = new TouchPad({
+  onTap: (name) => act(name === 'act' ? 'KeyE' : 'KeyF'),
+  onPress: () => sound.start(),
+  onMode: (on) => hud.setTouch(on),
+});
+hud.setTouch(touch.on);
 const input = { steer: 0, tuck: false, brake: false, jump: false, walk: false, run: false };
 const pedals = { throttle: false, reverse: false, steer: 0, handbrake: false, climb: false, sink: false }; // driving and flying
 function readInput() {
   const L = keys.has('KeyA') || keys.has('ArrowLeft');
   const R = keys.has('KeyD') || keys.has('ArrowRight');
-  input.steer = (L ? 1 : 0) - (R ? 1 : 0);
-  input.tuck = keys.has('KeyW') || keys.has('ArrowUp');
-  input.brake = keys.has('KeyS') || keys.has('ArrowDown');
-  input.jump = keys.has('Space');
+  const shift = keys.has('ShiftLeft') || keys.has('ShiftRight');
+  const t = touch.read(); // the stick steers by how far it's pushed
+  input.steer = THREE.MathUtils.clamp((L ? 1 : 0) - (R ? 1 : 0) + t.steer, -1, 1);
+  input.tuck = keys.has('KeyW') || keys.has('ArrowUp') || t.up;
+  input.brake = keys.has('KeyS') || keys.has('ArrowDown') || t.down;
+  input.jump = keys.has('Space') || t.big;
   input.walk = input.tuck;
-  input.run = keys.has('ShiftLeft') || keys.has('ShiftRight');
+  input.run = shift || t.full; // on foot, the stick pushed all the way out runs
   pedals.throttle = input.tuck;
   pedals.reverse = input.brake;
   pedals.steer = input.steer;
   pedals.handbrake = input.jump;
   pedals.climb = input.jump;
-  pedals.sink = input.run;
+  pedals.sink = shift || t.low;
 }
 
 // Back on the board. A rider seated on the snowmobile or in the Jetson stays
@@ -295,7 +332,7 @@ function toggleLocomotion() {
   if (!phys.grounded || phys.crashed > 0) return;
   if (rider.locomotion === 'walk') {
     restoreRide();
-    hud.toast('On board · W push / tuck');
+    hud.toast(touch.on ? 'On board' : 'On board · W push / tuck');
     return;
   }
   if (!rider.setLocomotion('walk')) {
@@ -305,7 +342,7 @@ function toggleLocomotion() {
   phys.vel.set(0, 0, 0);
   phys.yawRate = phys.jumpCharge = phys.slip = 0;
   trail.gap(phys.pos);
-  hud.toast('On foot · W walk · Shift run · F board');
+  hud.toast(touch.on ? 'On foot · push the stick out to run' : 'On foot · W walk · Shift run · F board');
 }
 
 // ---------- Rider ----------
@@ -341,7 +378,7 @@ async function chooseRider(id) {
     menu.save();
   }
   riderStatus.textContent = loaded
-    ? (rider.model?.canWalk ? 'Ready · F switches board / on foot' : 'Ready · snowboarding')
+    ? (rider.model?.canWalk ? `Ready · ${touch.on ? 'On foot' : 'F'} switches board / on foot` : 'Ready · snowboarding')
     : 'Could not load that rider. Previous rider kept; choose again to retry.';
 }
 for (const b of riderButtons)
@@ -353,14 +390,18 @@ void chooseRider([riderParam, menu.prefs.rider].find((id) => RIDERS.includes(id)
 
 // ---------- Panels ----------
 const panel = document.getElementById('panel');
+const panelNextBtn = document.getElementById('panel-next');
 let panelNext = null;
-function showPanel(tab, html, next) {
+// `label`, if given, is written on the next button, which then runs the panel's width.
+function showPanel(tab, html, next, label = null) {
   document.getElementById('panel-tab').textContent = tab;
   document.getElementById('panel-body').innerHTML = html;
+  panelNextBtn.textContent = label ?? '▶';
+  panelNextBtn.classList.toggle('wide', !!label);
   panel.classList.remove('hidden');
   panelNext = () => { panel.classList.add('hidden'); next(); };
 }
-document.getElementById('panel-next').addEventListener('click', () => {
+panelNextBtn.addEventListener('click', () => {
   sound.start();
   if (panelNext) { const f = panelNext; panelNext = null; f(); }
 });
@@ -387,7 +428,25 @@ function startRun(at = spawn) {
 
 phys.reset(startAt.x, startAt.z, yawOf(startAt.dx, startAt.dz));
 gps.restore(gpsFrom()); // a destination set before a reload or a trip to the diorama
-const introPanel = () => showPanel('Hemu · 禾木', `
+// On a touch screen the keys give way to the four moves, drawn.
+const MOVES = {
+  stick: '<circle cx="26" cy="26" r="22" stroke-dasharray="3 3"/><circle cx="19" cy="22" r="9" fill="#fff" stroke-width="2.4"/>'
+    + '<path d="M26 9l-3 3M26 9l3 3M26 43l-3-3M26 43l3-3M9 26l3-3M9 26l3 3M43 26l-3-3M43 26l-3 3"/>',
+  ollie: '<circle cx="26" cy="26" r="21" fill="#f0c24a" stroke-width="2.4"/><path d="M15 33h22M26 29V15M20.5 20.5 26 15l5.5 5.5"/>',
+  card: '<rect x="4" y="15" width="44" height="22" fill="#fff" stroke-width="2.4"/><path d="M11 26h20M37 21l5 5-5 5"/>',
+  map: '<circle cx="26" cy="26" r="21" fill="#fff" stroke-width="2.4"/><path d="M17 37c3-8 6-13 9-20M30 38c-1-7 0-14 4-21" stroke="#4f8fd6"/>'
+    + '<path d="M26 15l5 13-5-3-5 3z" fill="#f0c24a"/>',
+};
+const move = (name) => `<svg viewBox="0 0 52 52" aria-hidden="true">${MOVES[name]}</svg>`;
+const introPanel = () => touch.on ? showPanel('Hemu · 禾木', `
+  <p>Top of <b>Gondola No. 6</b>, 2,756 m. The whole mountain is yours, all the way down to the <b>East Service Centre</b>.</p>
+  <div class="keys moves">
+    ${move('stick')}<span><b>Drag</b> anywhere low on the left: sideways to carve, push up to tuck, pull back to skid</span>
+    ${move('ollie')}<span><b>Hold Ollie</b> and let go to jump · spin in the air</span>
+    ${move('card')}<span><b>Tap the card</b> when one pops up: ride a lift, take the pickup, the snowmobile or the Jetson ONE</span>
+    ${move('map')}<span><b>Tap the map</b>, top right, for the whole mountain and the GPS</span>
+  </div>
+  <p class="dim">Terrain: real elevation data. Runs and lifts: OpenStreetMap / OpenSkiMap.</p>`, startRun, 'Drop in ▸') : showPanel('Hemu · 禾木', `
   <p>Top of <b>Gondola No. 6</b>, Hemu Jikepulin, Altay — 2,756 m.
   The whole mountain is yours: drop into <b>云霄峰道 Yunxiaofeng</b> (${Math.round(runLength)} m) or ride anywhere,
   all the way down the valley to the <b>East Service Centre</b> (东区服务大厅), 1,300 m below.
@@ -408,14 +467,19 @@ const introPanel = () => showPanel('Hemu · 禾木', `
 // ---------- Camera ----------
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _look = new THREE.Vector3();
 const camLook = new THREE.Vector3();
+// How far the screen is toward a phone held upright: 0 when it's square or
+// wider, 1 at 9:19.5. A tall, narrow view sees little of the slope either side,
+// so as this grows the cameras pull back, rise, look further ahead and widen
+// their lens, keeping you low in the frame with the run ahead above you.
+const portrait = () => THREE.MathUtils.clamp((1 - camera.aspect) / 0.54, 0, 1);
 function cameraTarget(out, look) {
-  const sp = phys.speed;
-  const d = 4.6 + Math.min(sp, 30) * 0.07;
+  const sp = phys.speed, p = portrait();
+  const d = 4.6 + p * 3.4 + Math.min(sp, 30) * 0.07;
   out.copy(phys.pos).addScaledVector(camDir, -d);
-  out.y += 1.9 + Math.min(sp, 30) * 0.025;
+  out.y += 1.9 + p * 2.1 + Math.min(sp, 30) * 0.025;
   out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 1.5);
-  look.copy(phys.pos).addScaledVector(camDir, 3.5);
-  look.y += 0.7;
+  look.copy(phys.pos).addScaledVector(camDir, 3.5 + p * 6.5);
+  look.y += 0.7 - p * 0.3;
 }
 function snapCamera() {
   cameraTarget(camera.position, camLook);
@@ -435,7 +499,7 @@ function updateIntroCamera(dt) {
   introT += dt;
   introPose(introT, camera.position, _look);
   camera.lookAt(_look);
-  setLens(50, 6);
+  setLens(50 + portrait() * 10, 6);
 }
 
 // The title and the flight down scale the near plane and the ink pass's line
@@ -581,7 +645,7 @@ function updateRideCamera(dt) {
   camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 1.2);
   camLook.lerp(_look, 1 - Math.exp(-dt * 10));
   camera.lookAt(camLook);
-  camera.fov = 60 + Math.min(sp, 30) * 0.45;
+  camera.fov = 60 + portrait() * 15 + Math.min(sp, 30) * 0.45;
   camera.updateProjectionMatrix();
 }
 
@@ -683,7 +747,8 @@ function frame() {
     if (timing) elapsed += dt;
     updateDriveCamera(dt);
     hud.update(phys, elapsed);
-    if (car.flies) hud.prompt(drive.landed ? car.hintLanded : car.hint);
+    driveT += dt;
+    hud.prompt(...carHint(car));
     // The rotors' wash is a wind of its own.
     sound.update(drive.speed * car.wind + (car.flies ? drive.spool * 12 : 0), 0, false, {
       kind: car.name, speed: Math.abs(drive.vel.dot(drive.forward(_f))), spool: drive.spool, load: drive.load,
@@ -715,6 +780,7 @@ function frame() {
     saveWhereabouts(whereabouts());
   }
   if (leaving) updateLeaving(dt);
+  touchLayout();
   letters.update(dt, time, camera, titleDist * 0.45, pointer);
   specks.update(dt, time, camera, titleDist, renderer.getPixelRatio());
   if (island.visible) island.update(time);
@@ -733,6 +799,35 @@ function frame() {
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
   post.render(scene, camera, time, [sky, spray.points, specks.points, backdrop, ...forest.farMeshes, ...marks.hidden]);
   requestAnimationFrame(frame);
+}
+
+// What the touch controls show (touch.js): on the board the stick and Ollie,
+// with On foot beside it for a rider who can walk; on foot Board in Ollie's
+// place; in a vehicle its handbrake (flying, Up and Down) and the way out; on a
+// lift only Skip. The button above them does what E would where you are.
+function touchLayout() {
+  const shown = touch.on && !bigMap.isOpen && !leaving && (state === 'ride' || state === 'drive' || state === 'lift');
+  touch.show(shown);
+  if (!shown) return;
+  if (state === 'ride') {
+    const walking = rider.locomotion === 'walk';
+    touch.layout({
+      layout: walking ? 'walk' : 'board',
+      big: walking ? 'board' : 'ollie',
+      aux: !walking && rider.model?.canWalk ? 'foot' : null,
+      act: nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
+        : boardable ? { label: 'Ride up', icon: 'lift', lit: true } : null,
+    });
+  } else if (state === 'drive') {
+    touch.layout({
+      layout: car.flies ? 'fly' : 'drive',
+      big: car.flies ? 'up' : 'handbrake',
+      low: car.flies ? 'down' : null,
+      act: { label: car.touch.exit, icon: 'out', dim: car.phys.canExit === false },
+    });
+  } else {
+    touch.layout({ layout: 'lift', stick: false, act: liftRide.t > 0.5 ? { label: 'Skip', icon: 'skip' } : null });
+  }
 }
 
 // Back on your feet where you came to rest, heading the way you were going.
@@ -786,9 +881,13 @@ function updateBoarding() {
   const hall = boardable?.hall ?? null;
   if (hall && hall !== atHall) hud.toast(hall.zh, 2200);
   atHall = hall;
-  hud.prompt(nearCar ? nearCar.prompt
-    : boardable ? `${hall ? `${hall.en} · ` : ''}<kbd>E</kbd> ride <b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`
-    : !timing && spawn.hint ? spawn.hint : '');
+  if (nearCar) hud.prompt(nearCar.prompt, nearCar.touch.prompt, pressE);
+  else if (boardable) {
+    const where = hall ? `${hall.en} · ` : '';
+    const up = `<b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`;
+    hud.prompt(`${where}<kbd>E</kbd> ride ${up}`, `${where}Ride ${up} ▸`, pressE);
+  } else if (!timing && spawn.hint) hud.prompt(spawn.hint, spawn.touchHint);
+  else hud.prompt('');
 }
 
 let liftRide = null;
@@ -804,7 +903,7 @@ function board(ride) {
   cabin.rotation.set(0, Math.atan2(ride.dir.x, ride.dir.z), 0);
   phys.vel.set(0, 0, 0);
   trail.gap(phys.pos);
-  hud.prompt('<kbd>Space</kbd> skip the ride');
+  hud.prompt('<kbd>Space</kbd> skip the ride', 'Skip the ride ▸', pressE);
   updateLift(0);
   camera.position.copy(_w);
 }
@@ -828,7 +927,7 @@ function updateLift(dt) {
   _look.y -= 3;
   camLook.copy(_look);
   camera.lookAt(camLook);
-  camera.fov = 58;
+  camera.fov = 58 + portrait() * 12;
   camera.updateProjectionMatrix();
   if (L.t >= L.dur) unload(ride);
 }
@@ -908,8 +1007,16 @@ function getIn(v) {
   trail.gap(phys.pos);
   for (const t of v.tracks) t.gap(v.phys.pos);
   acc = 0;
-  hud.prompt(v.flies && v.phys.landed ? v.hintLanded : v.hint);
+  driveT = 0;
+  hud.prompt(...carHint(v));
   hud.toast(v.title, 1600);
+}
+// The hint while you drive or fly, for the keys and for a touch screen, where
+// the buttons say what they do and it shows only for the first few seconds.
+let driveT = 0;
+function carHint(v) {
+  const [keys, touchHint] = v.flies && v.phys.landed ? [v.hintLanded, v.touch.hintLanded] : [v.hint, v.touch.hint];
+  return [keys, driveT < 6 ? touchHint : ''];
 }
 function getOut() {
   car.phys.land?.(); // hovering just above the snow, it sets down first
@@ -988,13 +1095,13 @@ function hopping(dt) {
 const Y_AXIS = new THREE.Vector3(0, 1, 0), _cd = new THREE.Vector3();
 function driveCameraTarget(out, look) {
   const drive = car.phys, { cam } = car;
-  const sp = Math.min(drive.speed, 30);
+  const sp = Math.min(drive.speed, 30), p = portrait(), far = 1 + p * 0.5;
   _cd.copy(camDir);
   if (cam.side) _cd.applyAxisAngle(Y_AXIS, cam.side * (1 - THREE.MathUtils.smoothstep(sp, 4, 20)));
-  out.copy(drive.pos).addScaledVector(_cd, -(cam.back + sp * 0.08));
-  out.y += cam.up + sp * 0.02;
+  out.copy(drive.pos).addScaledVector(_cd, -(cam.back * far + sp * 0.08));
+  out.y += cam.up * far + sp * 0.02;
   out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 1.5);
-  look.copy(drive.pos).addScaledVector(camDir, cam.ahead);
+  look.copy(drive.pos).addScaledVector(camDir, cam.ahead * (1 + p * 0.6));
   look.y += cam.look;
 }
 function updateDriveCamera(dt) {
@@ -1006,7 +1113,7 @@ function updateDriveCamera(dt) {
   camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 1.2);
   camLook.lerp(_look, 1 - Math.exp(-dt * Math.max(10, follow)));
   camera.lookAt(camLook);
-  camera.fov = 60 + Math.min(drive.speed, 30) * 0.35;
+  camera.fov = 60 + portrait() * 15 + Math.min(drive.speed, 30) * 0.35;
   camera.updateProjectionMatrix();
 }
 function layTracks() {
@@ -1029,6 +1136,7 @@ function boxGap(o, x, z) {
 // spawn, where R takes you back to, and the menu's way back to the diorama
 // opens on it. Returns the spawn, or null if the key names nothing here.
 const HINT = '<kbd>A</kbd><kbd>D</kbd> carve · <kbd>W</kbd> tuck or push · <kbd>R</kbd> back here';
+const TOUCH_HINT = 'drag low on the left to carve · push up to tuck';
 function resolveDestination(dest) {
   const key = destinationKey(dest);
   if (dest.kind === 'run') {
@@ -1039,7 +1147,8 @@ function resolveDestination(dest) {
     const rises = (a) => detail.heightAt(a.x + a.dx * 15, a.z + a.dz * 15) > detail.heightAt(a.x, a.z) - 0.3;
     let d = 14, at = along(top.points, d);
     while (d < 120 && (!openGround(at.x, at.z) || rises(at))) at = along(top.points, (d += 6));
-    return { key, x: at.x, z: at.z, dx: at.dx, dz: at.dz, toast: 'Drop in!', hint: `<b>${top.run.name || 'Unnamed run'}</b> · ${HINT}` };
+    return { key, x: at.x, z: at.z, dx: at.dx, dz: at.dz, toast: 'Drop in!',
+      hint: `<b>${top.run.name || 'Unnamed run'}</b> · ${HINT}`, touchHint: `<b>${top.run.name || 'Unnamed run'}</b> · ${TOUCH_HINT}` };
   }
   if (dest.kind === 'lodge') {
     const c = SERVICE_CENTRES.find((sc) => sc.id === dest.id);
@@ -1048,7 +1157,7 @@ function resolveDestination(dest) {
     const fx = c.faceTo[0] - c.x, fz = c.faceTo[1] - c.z, fl = Math.hypot(fx, fz);
     const at = openSpot(c, [80, 95, 110, 130], (x, z, n, R) => (((x - c.x) * fx + (z - c.z) * fz) / (R * fl)) * 2 - (1 - n.y) * 8 - R * 0.01);
     if (!at) return null;
-    return facing({ key, x: at.x, z: at.z, dx: c.faceTo[0] - at.x, dz: c.faceTo[1] - at.z, toast: c.zh, hint: HINT }, camDir);
+    return facing({ key, x: at.x, z: at.z, dx: c.faceTo[0] - at.x, dz: c.faceTo[1] - at.z, toast: c.zh, hint: HINT, touchHint: TOUCH_HINT }, camDir);
   }
   const lift = meta.lifts.find((l) => String(l.id) === dest.id);
   if (!lift) return null;
@@ -1056,7 +1165,7 @@ function resolveDestination(dest) {
   const ride = rides.find((r) => String(r.id) === dest.id) ?? liftEnds(lift);
   const { zh } = liftTitle(lift);
   if (dest.end === 'top') {
-    return { key, ...topSpot(ride), toast: `${zh} · ${Math.round(ride.top.y).toLocaleString()} m`, hint: HINT };
+    return { key, ...topSpot(ride), toast: `${zh} · ${Math.round(ride.top.y).toLocaleString()} m`, hint: HINT, touchHint: TOUCH_HINT };
   }
   // Beside the bottom station on the side you'd queue from, facing it.
   const P = ride.bottom;
@@ -1065,7 +1174,7 @@ function resolveDestination(dest) {
   if (!at) return null;
   return facing({
     key, x: at.x, z: at.z, dx: P.x - at.x, dz: P.z - at.z,
-    toast: `${zh} · ${Math.round(P.y).toLocaleString()} m`, hint: HINT,
+    toast: `${zh} · ${Math.round(P.y).toLocaleString()} m`, hint: HINT, touchHint: TOUCH_HINT,
     board: dest.end === 'ride' && ride.cable ? ride : null,
   }, ride.dir);
 }
@@ -1115,11 +1224,11 @@ function updateArrival(dt) {
   camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 2);
   camLook.copy(A.look);
   camera.lookAt(camLook);
-  setLens(60, Math.max(6, camera.position.distanceTo(A.look)));
+  setLens(60 + portrait() * 15, Math.max(6, camera.position.distanceTo(A.look)));
   setCloud(1 - THREE.MathUtils.smoothstep(u, 0, 0.4));
   if (A.t < 1) return;
   setCloud(0);
-  setLens(60, 6);
+  setLens(60 + portrait() * 15, 6);
   arrival = null;
   startRun(A.at);
   if (A.at === spawn && spawn.board) board(spawn.board);

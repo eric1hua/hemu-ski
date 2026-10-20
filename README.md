@@ -89,13 +89,31 @@ full speed. The sticks move with
 the controls: the right one with W, S, A and D, the left one forward to climb
 and back to come down, and the pilot's hands go with them.
 
-A menu rail on the left edge links to the diorama, picks your rider (**Rider**:
+A menu rail on the left edge links to the diorama, takes you back to the start
+(R), picks your rider (**Rider**:
 male, female or the classic one; the female rider can also walk and run off the
 board with F) and switches music and sound effects on and off. The game
 remembers your rider and those settings between visits, so you keep the same
 rider after a trip to the diorama; `?rider=male|female|classic` in the URL picks
 one too. Its **Outfit & gear** and **Settings** panels are placeholders for now,
 and nothing plays on the music bus yet.
+
+On a phone or tablet the game plays by touch (`src/touch.js`). Put a thumb down
+anywhere low on the left and drag: a stick appears under it, and sideways
+carves (by how far you push), up tucks and down skids. Hold **Ollie**, bottom
+right, and let go to jump. A button above it appears when there's something to
+do where you are: **Ride up** at a lift, **Drive**, **Ride** or **Fly** beside a
+vehicle, then **Get out** or **Get off**, and **Skip** on the lift; the prompt
+card says the same and does it when tapped. A rider who can walk gets an **On
+foot** button: on foot the stick walks, all the way out runs, and **Board** takes
+Ollie's place. In the pickup and on the snowmobile the stick drives, brakes and
+reverses and the big button is the **Handbrake**; in the Jetson ONE the stick
+flies and turns, and **Up** and **Down** climb and land. A tap skips the flight
+down from the title and the drop out of the cloud. The HUD gathers at the top,
+clear of the notch and the thumbs, and the menu folds behind one button in the
+corner. Held upright, the camera sits further back and higher, with a wider
+lens, so you see the run ahead above you. Touch mode starts on a touch screen or
+at the first touch, and a key press or a mouse click goes back to the keys.
 
 Or double-click `scripts/Hemu Ski.command` (a symlink to it on the Desktop works
 too). It starts the server on port 5190 and opens the game. Close the Terminal
@@ -120,6 +138,12 @@ of it:
 - a **bottom station**: beside it, to board with E (or **Board and ride up**
   to go straight up); a **top station**: on the snow beside it, facing downhill;
 - a **service centre**: outside the hall, facing the gondola it boards.
+
+On a touch screen, one finger spins the table, a pinch zooms and two fingers
+move it about (WASD flying's job). A tap picks a place straight away, with twice
+a mouse's reach, and a double tap flies closer to that spot. On a phone the key
+sits at the top and the buttons along the bottom, and the first visit shows a
+card with these gestures.
 
 The place is written into the address as `?at=<key>` (`run:<OSM id>`,
 `lift:<OSM id>:bottom|top|ride` or `lodge:east|west`; see `src/destinations.js`).

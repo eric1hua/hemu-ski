@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Hemu Diorama</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -27,6 +27,7 @@
       </ul>
       <p class="dim" id="stats"></p>
       <p class="hint">Drag to spin · scroll to zoom · WASD to fly (Q/E down/up, Shift faster) · click a run, lift, station or lodge to go there</p>
+      <p class="hint touch-hint">Drag to spin · pinch to zoom · two fingers to move · tap a run, lift or lodge to go there</p>
       <div class="btns">
         <button id="spin" aria-pressed="true">Auto-spin</button>
         <button id="home">Reset view</button>
@@ -50,6 +51,25 @@
       <p class="what"></p>
       <div class="acts"></div>
     </section>
+    <!-- The first time on a touch screen: how to handle the table. -->
+    <div id="guide" class="dio-guide hidden">
+      <section role="dialog" aria-modal="true" aria-labelledby="guide-tab">
+        <div class="tab" id="guide-tab">Touch the table</div>
+        <div class="moves">
+          <svg viewBox="0 0 64 56" aria-hidden="true"><circle cx="44" cy="22" r="10" fill="#fff" stroke-dasharray="4 3" /><path d="M34 40C26 46 14 44 8 34M8 34h9M8 34l2 8" /></svg>
+          <p><b>Spin it</b>: drag with one finger</p>
+          <svg viewBox="0 0 64 56" aria-hidden="true"><circle cx="22" cy="34" r="8" fill="#fff" stroke-dasharray="4 3" /><circle cx="42" cy="22" r="8" fill="#fff" stroke-dasharray="4 3" /><path d="M12 46 6 52M6 52h7M6 52v-7M52 10l6-6M58 4h-7M58 4v7" /></svg>
+          <p><b>Zoom</b>: pinch</p>
+          <svg viewBox="0 0 64 56" aria-hidden="true"><circle cx="20" cy="20" r="8" fill="#fff" stroke-dasharray="4 3" /><circle cx="40" cy="20" r="8" fill="#fff" stroke-dasharray="4 3" /><path d="M20 32v16M40 32v16M15 43l5 5 5-5M35 43l5 5 5-5" /></svg>
+          <p><b>Move around</b>: drag with two fingers</p>
+          <svg viewBox="0 0 64 56" aria-hidden="true"><circle cx="32" cy="28" r="8" fill="#fff" stroke-dasharray="4 3" /><circle cx="32" cy="28" r="16" stroke-dasharray="2 4" /></svg>
+          <p><b>Pick a place</b>: tap a run, a lift, a station or a lodge</p>
+          <svg viewBox="0 0 64 56" aria-hidden="true"><circle cx="32" cy="28" r="8" fill="#fff" stroke-dasharray="4 3" /><path d="M18 14l-5-5M46 14l5-5M18 42l-5 5M46 42l5 5" /></svg>
+          <p><b>Fly closer</b>: double-tap a spot</p>
+        </div>
+        <button type="button" class="ok">Got it</button>
+      </section>
+    </div>
     <div id="cloud"></div>
 
     <p class="dio-credit">Terrain: AWS Terrain Tiles · Runs &amp; lifts © OpenStreetMap contributors</p>

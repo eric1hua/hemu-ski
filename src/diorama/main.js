@@ -297,7 +297,7 @@ const tip = document.getElementById('tip');
 const mouse = new THREE.Vector2(), ndc = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
 const bounds = new THREE.Box3(new THREE.Vector3(-hf.half, baseY, -hf.half), new THREE.Vector3(hf.half, top + 400, hf.half));
-let pointerIn = false, dragging = false, downAt = null, needsPick = false;
+let pointerIn = false, dragging = false, downAt = null, needsPick = false, lastTap = null;
 canvas.addEventListener('pointermove', (e) => {
   mouse.set(e.clientX, e.clientY);
   pointerIn = true;
@@ -308,42 +308,66 @@ canvas.addEventListener('pointerdown', (e) => { dragging = true; downAt = [e.cli
 window.addEventListener('pointerup', (e) => {
   dragging = false;
   // A click or tap (no drag) picks at that spot and selects what's there, or
-  // clears the selection on open ground.
+  // clears the selection on open ground. A second tap there straight after
+  // flies closer instead. A finger gets twice the reach, and leaves no hover
+  // behind it.
   if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 6) {
+    const finger = e.pointerType !== 'mouse', now = performance.now();
     mouse.set(e.clientX, e.clientY);
     pointerIn = true;
-    if (e.button === 0 && !wipe) nav.select(pick());
+    if (finger && lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
+      lastTap = null;
+      if (!wipe) flyCloser();
+    } else {
+      if (e.button === 0 && !wipe) nav.select(pick(finger));
+      lastTap = finger ? { t: now, x: e.clientX, y: e.clientY } : null;
+    }
   }
+  if (e.pointerType !== 'mouse') pointerIn = false;
   downAt = null;
   needsPick = true;
 });
 
-function pick() {
+// `finger`: reach twice as far, for a fingertip.
+function pick(finger = false) {
   if (!pointerIn || dragging) return null;
-  const w = window.innerWidth, h = window.innerHeight;
-  const spot = (you.shown && nearestSpot([you.item], you.reach, w, h))
-    || nearestSpot(lodges, 55 * LODGE_SCALE, w, h) || nearestSpot(stations, 16 * STATION_SCALE, w, h);
+  const w = window.innerWidth, h = window.innerHeight, k = finger ? 2 : 1;
+  const spot = (you.shown && nearestSpot([you.item], you.reach, w, h, 12 * k))
+    || nearestSpot(lodges, 55 * LODGE_SCALE, w, h, 12 * k) || nearestSpot(stations, 16 * STATION_SCALE, w, h, 12 * k);
   if (spot) return spot;
-  const lift = runMap.nearestLift(mouse, camera, w, h, 9);
+  const lift = runMap.nearestLift(mouse, camera, w, h, 9 * k);
   if (lift) return lift;
-  ndc.set((mouse.x / w) * 2 - 1, -(mouse.y / h) * 2 + 1);
-  raycaster.setFromCamera(ndc, camera);
-  const hit = runMap.pickGround(raycaster.ray, bounds);
+  const hit = groundAt(mouse.x, mouse.y);
   if (!hit) return null;
   const mPerPx = (camera.position.distanceTo(hit) * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / h;
-  return runMap.nearestRun(hit.x, hit.z, Math.max(20, mPerPx * 10));
+  return runMap.nearestRun(hit.x, hit.z, Math.max(20, mPerPx * 10 * k));
+}
+// The mountain under a point on the screen, or null.
+function groundAt(x, y) {
+  ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  return runMap.pickGround(raycaster.ray, bounds);
+}
+// A double tap: the camera flies in to about half as far from the spot,
+// turning round it, and no closer than the zoom limit.
+function flyCloser() {
+  const hit = groundAt(mouse.x, mouse.y);
+  if (!hit) return;
+  pauseSpin();
+  flyCamera(viewOf(hit, Math.max(MIN_ZOOM, camera.position.distanceTo(hit) * 0.45)), hit);
+  resumeSpinLater();
 }
 
 // A lodge or lift station is hovered within `reach` metres of its middle,
-// measured on screen; of several, the closest for its size.
+// measured on screen, and at least `min` pixels; of several, the closest for its size.
 const lp = new THREE.Vector3();
-function nearestSpot(list, reach, w, h) {
+function nearestSpot(list, reach, w, h, min = 12) {
   const pxPerM = h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
   let best = null, bd = 1;
   for (const l of list) {
     lp.copy(l.top).project(camera);
     if (lp.z > 1) continue;
-    const r = Math.max(12, (reach * pxPerM) / camera.position.distanceTo(l.top));
+    const r = Math.max(min, (reach * pxPerM) / camera.position.distanceTo(l.top));
     const d = Math.hypot((lp.x + 1) * w / 2 - mouse.x, (1 - lp.y) * h / 2 - mouse.y) / r;
     if (d < bd) { bd = d; best = l; }
   }
@@ -446,6 +470,35 @@ if (startAt) {
   nav.select(startAt);
   emerge(startAt);
 }
+
+// ---------- Touch ----------
+// Touch mode, as in the game (touch.js): on from a coarse pointer or the first
+// touch, off at a mouse click or a key. body.touch swaps the hint and sizes the
+// cards for fingers. The first time on a touch screen, a card shows how to
+// handle the table; Got it, or a tap beside it, puts it away for good.
+const GUIDE_KEY = 'hemu-diorama.touch-guide';
+const guide = document.getElementById('guide');
+function setTouch(on) {
+  document.body.classList.toggle('touch', on);
+  if (!on) return;
+  let seen = true;
+  try { seen = !!localStorage.getItem(GUIDE_KEY); } catch {}
+  if (!seen && !startAt) guide.classList.remove('hidden');
+}
+function closeGuide() {
+  guide.classList.add('hidden');
+  try { localStorage.setItem(GUIDE_KEY, '1'); } catch {}
+}
+guide.querySelector('.ok').addEventListener('click', closeGuide);
+guide.addEventListener('click', (e) => {
+  if (e.target === guide) closeGuide();
+});
+window.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'touch' && !document.body.classList.contains('touch')) setTouch(true);
+  else if (e.pointerType === 'mouse') document.body.classList.remove('touch');
+}, true);
+window.addEventListener('keydown', () => document.body.classList.remove('touch'), true);
+setTouch(matchMedia('(pointer: coarse)').matches);
 // Back from the game with this page kept as it was: it's still in the cloud.
 window.addEventListener('pageshow', (e) => {
   if (e.persisted && nav.selected) emerge(nav.selected);

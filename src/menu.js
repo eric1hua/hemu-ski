@@ -1,7 +1,8 @@
-// Sidebar menu: a shortcut to the diorama, panels for the rider (see main.js),
-// outfit & gear and settings, and music / sound-effect toggles. Settings are
-// remembered between visits; createMenu() hands back { prefs, save } so the
-// game can keep its rider in the same place.
+// Sidebar menu: a shortcut to the diorama, back to the start (see main.js),
+// panels for the rider (see main.js), outfit & gear and settings, and music /
+// sound-effect toggles. Settings are remembered between visits; createMenu()
+// hands back { prefs, save, close } so the game can keep its rider in the same
+// place and fold the menu away.
 const PREFS_KEY = 'hemu-ski.prefs';
 
 function loadPrefs() {
@@ -47,6 +48,19 @@ export function createMenu(sound) {
     });
   }
 
+  // ---------- Folded ----------
+  // On a touch screen (body.touch) the rail folds away behind one button in the
+  // corner, clear of the thumbs, and drops down as a row when you tap it.
+  const toggle = root.querySelector('.toggle');
+  let expanded = false;
+  function expand(on) {
+    expanded = on;
+    root.classList.toggle('expanded', on);
+    toggle.setAttribute('aria-expanded', String(on));
+    if (!on) show(null);
+  }
+  toggle.addEventListener('click', () => expand(!expanded));
+
   // ---------- Panels ----------
   // One open at a time; its button stays lit. Escape or a click elsewhere closes it.
   const openers = [...root.querySelectorAll('[data-flyout]')];
@@ -63,11 +77,11 @@ export function createMenu(sound) {
   for (const btn of openers)
     btn.addEventListener('click', () => show(open === btn.dataset.flyout ? null : btn.dataset.flyout));
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Escape' && open) show(null);
+    if (e.code === 'Escape' && (open || expanded)) expand(false);
   });
   window.addEventListener('pointerdown', (e) => {
-    if (open && !root.contains(e.target)) show(null);
+    if ((open || expanded) && !root.contains(e.target)) expand(false);
   });
 
-  return { prefs, save };
+  return { prefs, save, close: () => expand(false) };
 }
