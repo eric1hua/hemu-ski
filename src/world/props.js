@@ -167,7 +167,7 @@ const STATION_PULL = 20;
 // `spacing` multiplies the gap between cars; `speed` is the haul rope in m/s.
 // Besides the meshes it returns `lines` (each lift's cable from points[0] to the
 // far end, for riding it, with the lift's OSM `id`) and `footprints` (station
-// boxes, for collisions).
+// boxes, for collisions, with the height of their roofs as `top`).
 export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacing: gap = 1, speed = 5 } = {}) {
   const group = new THREE.Group();
   const movers = [];
@@ -238,7 +238,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
         st.add(sign);
         badges.push(sign);
       }
-      footprints.push({ x: P.x, z: P.z, yaw, hw: 7 * stationScale, hd: 9 * stationScale });
+      footprints.push({ x: P.x, z: P.z, yaw, hw: 7 * stationScale, hd: 9 * stationScale, top: P.y + 12 * stationScale });
     }
 
     // Towers every ~140 m; the cable runs tower-to-tower at a fixed clearance.
@@ -555,8 +555,8 @@ export function createServiceCentre(hf, { x, z, faceTo, roof, zh, en, ele }, { s
   );
   board.position.set(-W * 0.18, H + 3.6, D * 0.3 + 0.1);
   g.add(board);
-  // The plinth's outline, for collisions.
-  g.userData.footprint = { x, z, yaw, hw: W * 0.625 * scale, hd: D * 0.75 * scale };
+  // The plinth's outline, for collisions, and the roof's top.
+  g.userData.footprint = { x, z, yaw, hw: W * 0.625 * scale, hd: D * 0.75 * scale, top: hi + (H + 10) * scale };
   return g;
 }
 

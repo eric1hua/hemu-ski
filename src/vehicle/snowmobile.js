@@ -122,6 +122,7 @@ export class Snowmobile {
     this.footprint.x = p.pos.x;
     this.footprint.z = p.pos.z;
     this.footprint.yaw = p.yaw;
+    this.footprint.top = p.pos.y + this.dims.height;
   }
 }
 

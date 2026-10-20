@@ -1,0 +1,7 @@
+# Jetson ONE
+
+`jetson-one.glb`: a Jetson ONE, a single-seat electric multirotor, made with Tripo, supplied as `quadrotor+drone+3d+model.glb` and copied verbatim. SHA-256 `9ee65b0ccd2bfdc82bd06fbebbc28943d907a688467259773fc263584110dbbb`. 37 parts (28k triangles) sharing one material with a 2k JPEG base colour, nose toward +x, its left toward -z, the skids on the ground at y = 0, about 0.92 units long. Its eight propellers, two to a corner with one above the other (`tripo_part_17`, `_18`, `_8`, `_26`, `_new_0`, `_new_0_0_0`, `_new_0_1_0` and `_new_0_2`), and its two control sticks (`tripo_part_new_0_3` on the left, `tripo_part_new_0_0` on the right) are parts of their own so they can move.
+
+`src/vehicle/jetson.js` turns it to the pickup's axes (nose +z, left +x), scales it to 3.1 m nose to tail (3.3 m across the rotors and 1.7 m to the top of the roll cage), toon-shades it and merges everything but the moving parts into one mesh. Each propeller spins about its hub, midway between its blade tips; the sticks lean about their feet. It loads by those part names, so a re-export has to keep them.
+
+A real Jetson ONE is about 2.5 m long; this one is larger because the riders are chibi, with heads that wouldn't fit under the roll cage at that size. At 3.1 m the male and female riders sit under it with their hands on the sticks and their legs down the footwell; the classic rider's helmet still grazes the top bar. The seat, footwell, sticks and skid feet are measured off the model and listed at the top of `jetson.js`.

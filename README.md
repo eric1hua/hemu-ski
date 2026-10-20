@@ -66,6 +66,29 @@ hands on the grips, and lean into the turns. Both leave tracks (the snowmobile
 its track and two ski lines), and the mini-map shows where you left them. A
 reload parks them by the hall again.
 
+A Jetson ONE, a one-person electric aircraft, stands out on the snow in front of
+the hall, beyond the other two. Skate or walk up to it and press **E** to climb
+in: you sit in its seat, in sight inside the roll cage with a hand on each
+stick, while its eight rotors spin up. **Space** lifts off and climbs at
+15 m/s, and **Shift** comes down at 10 m/s; in between it holds its height.
+It's far more powerful than the real one, which is held to 102 km/h: W tilts it
+forward and it reaches 100 km/h in about 3 s and its 180 km/h limit in about 7,
+S brakes hard and then backs it off, and when you let go it levels out and
+comes to a hover within about 3 s, even from flat out. A and D turn it: on the
+spot at a hover, and banking into wider turns at speed, coming round in about
+150 m flat out. Low over the snow it climbs by itself to clear the ground over
+the next three seconds ahead (by more the faster it goes: over the treetops
+flat out) unless you're coming down, but slower and below their tops the trees,
+lift stations and halls are in the way, and it bounces off them. Hold Shift to land:
+it slows in the last few metres and settles on its skids. E gets you out once it's
+down, or hovering just above the snow at a crawl (it sets down first); any
+higher and it tells you to land first. R takes it back to its spot by the hall.
+At a hover the camera hangs off to its left, where you can see the pilot past
+the seat back, and it swings in behind as you speed up, keeping close even at
+full speed. The sticks move with
+the controls: the right one with W, S, A and D, the left one forward to climb
+and back to come down, and the pilot's hands go with them.
+
 A menu rail on the left edge links to the diorama, picks your rider (**Rider**:
 male, female or the classic one; the female rider can also walk and run off the
 board with F) and switches music and sound effects on and off. The game
@@ -154,9 +177,10 @@ edits were saved.
 | W (↑) | tuck; push along on the flat |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
-| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup, or on or off the snowmobile, beside it |
+| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup or the Jetson ONE, or on or off the snowmobile, beside it |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
 | In the pickup or on the snowmobile | W drive, S brake / reverse, A / D steer, Space handbrake, R back to the hall |
+| In the Jetson ONE | Space take off / climb, Shift come down / land, W / S fly forward / back, A / D turn, E get out once it's down (or hovering just above the snow), R back to the hall |
 | M | the whole map, with you on it (or click the mini-map); click it to set a GPS destination, Delete clears it, scroll / + / − zoom, drag or arrows move it |
 
 ## How it's built
@@ -194,12 +218,24 @@ edits were saved.
   both: a bicycle model whose engine, brakes and turning all share the grip on
   snow, with the body set on the plane under its four corners, and a handling
   preset for each.
+- `src/vehicle/jetson.js` loads the Jetson ONE (`public/models/jetson/`, a Tripo
+  model in 37 parts). Its eight propellers and two sticks are parts of their
+  own: each propeller spins about its hub, the two at a corner turning opposite
+  ways, with a faint blur disc that thickens as they spool up, and the sticks
+  lean about their feet; the rest is merged into one mesh.
+  `src/vehicle/flight.js` flies it: its flight controller leans it toward the
+  speed you ask for (the lean is its thrust sideways), banks it against any
+  slide, holds its height, keeps it clear of the snow ahead and sets it on the
+  plane under its skids when it lands. The trees, halls, stations and parked
+  vehicles carry their height (`top`), so it flies over what it clears.
 - On the snowmobile the rider sits through the same rig as on the board: the
   hips go on the seat, and the torso folds forward until the hands can reach
   the grips. Two-bone IK puts the feet on the running boards (knees out round the
   seat) and the hands on the grips (elbows out and down), and the fingers curl
   round them. Getting on or off, the rider slides from where they stood while
-  the pose blends from standing to sitting.
+  the pose blends from standing to sitting. In the Jetson the same pose puts the
+  hips on its cushion, the legs down the footwell under the nose and the hands on
+  the sticks' handles, which follow the sticks as they lean.
 
 ## What's approximate
 
@@ -212,5 +248,9 @@ edits were saved.
 - The two service centres are placed from OpenStreetMap (East) and the trail
   map (West, beside 3号's bottom station); the buildings are stylised.
 - Lift rides are sped up to 10–22 s.
+- The Jetson ONE is scaled to 3.1 m (a real one is about 2.5 m) so the riders'
+  big heads fit under its roll cage. It's much faster than the real one
+  (180 km/h against 102, and it climbs at 15 m/s), flies as long as you like, and its
+  rotors turn at a speed the eye can follow rather than thousands of rpm.
 
 Data © OpenStreetMap contributors (ODbL). Elevation: Mapzen / AWS Terrain Tiles.

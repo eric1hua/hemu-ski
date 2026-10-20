@@ -147,8 +147,8 @@ export class Hud {
   }
 
   // A parked vehicle: the pickup a red block, the snowmobile a smaller orange
-  // one on two skis, nose up for north, held on the rim when it's further than
-  // the map shows.
+  // one on two skis, the Jetson ONE a white pod between four rotors, nose up for
+  // north, held on the rim when it's further than the map shows.
   #drawVehicle(ctx, at, k, car) {
     const W = ctx.canvas.width, R = W / 2, rim = R - 12;
     let u = (car.x - at.x) * k, v = (car.z - at.z) * k;
@@ -160,7 +160,21 @@ export class Hud {
     ctx.strokeStyle = '#23303a';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    if (car.kind === 'snowmobile') {
+    if (car.kind === 'jetson') {
+      ctx.fillStyle = '#fbfaf5';
+      for (const [x, y] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) {
+        ctx.moveTo(0, 0); ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      for (const [x, y] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 3.5, 7, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    } else if (car.kind === 'snowmobile') {
       ctx.moveTo(-6, -10); ctx.lineTo(-6, -3); // the skis
       ctx.moveTo(6, -10); ctx.lineTo(6, -3);
       ctx.stroke();

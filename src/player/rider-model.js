@@ -110,8 +110,8 @@ export class RiderModel {
       Right: [pos('RightForeArm').sub(pos('RightArm')).normalize(), childDir(this.bones.RightForeArm.bone, this.root)],
     };
 
-    // Seated (on the snowmobile), the arms reach for the grips with two-bone IK,
-    // and the hands close round them.
+    // Seated (on the snowmobile, or in the Jetson), the arms reach for the grips
+    // (or the sticks' handles) with two-bone IK, and the hands close round them.
     const at = (bone) => this.root.worldToLocal(bone.getWorldPosition(new THREE.Vector3()));
     this.upperArm = pos('LeftArm').distanceTo(pos('LeftForeArm'));
     this.foreArm = pos('LeftForeArm').distanceTo(pos('LeftHand'));

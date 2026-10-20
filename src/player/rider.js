@@ -205,9 +205,10 @@ export class Rider {
   }
 
   // 'ride' on the board, 'walk' on foot (riders with walk and run clips), or
-  // 'sit' on a vehicle's `seat`: { hips, feet: [left, right], grips: [left, right] },
-  // the cushion under the hips, the soles' spots and the handlebar grips, in the
-  // body's frame (+z forward, +x left), the root following the vehicle.
+  // 'sit' on a vehicle's `seat`: { hips, feet: [left, right], grips: [left,
+  // right], kneeOut }, the cushion under the hips, the soles' spots and the
+  // handlebar grips, in the body's frame (+z forward, +x left), the root
+  // following the vehicle, and how far the knees spread (0.45 if it doesn't say).
   setLocomotion(mode, seat = this.seat) {
     if (mode === 'walk' && !this.model?.canWalk) return false;
     if (mode === 'sit' && !seat) return false;
@@ -376,7 +377,7 @@ export class Rider {
     // Legs: two-bone IK from hip socket to ankle, knees driven forward (and
     // out round the seat when sitting).
     const fwd = new THREE.Vector3(0, 0, 1);
-    this.kneeOut = sitting ? 0.45 : 0.12;
+    this.kneeOut = sitting ? this.seat.kneeOut ?? 0.45 : 0.12;
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? 1 : -1;
       const hip = new THREE.Vector3(0.12 * side, 0, 0).applyEuler(this.hips.rotation).add(this.hips.position);

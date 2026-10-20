@@ -12,6 +12,8 @@ import { Trail, Spray } from './player/fx.js';
 import { Truck } from './vehicle/truck.js';
 import { Snowmobile } from './vehicle/snowmobile.js';
 import { VehiclePhysics, PICKUP, SNOWMOBILE } from './vehicle/physics.js';
+import { Jetson } from './vehicle/jetson.js';
+import { FlightPhysics, JETSON } from './vehicle/flight.js';
 import { Hud } from './hud.js';
 import { BigMap } from './bigmap.js';
 import { Navigator } from './gps/navigator.js';
@@ -156,10 +158,11 @@ scene.add(marks.group);
 
 // ---------- Vehicles ----------
 // Parked for now in front of the East Service Centre, nose out: a pickup to the
-// left of the entrance and a snowmobile to the right. Any rider can take
-// either: E beside it gets in (or on), E again gets out (see Driving). In the
-// pickup the rider is out of sight in the cab; on the snowmobile they sit on
-// it, hands on the grips.
+// left of the entrance, a snowmobile to the right, and a Jetson ONE, a
+// one-person aircraft, out beyond them. Any rider can take any of them: E beside
+// it gets in (or on), E again gets out (see Driving). In the pickup the rider is
+// out of sight in the cab; on the snowmobile they sit on it, hands on the grips,
+// and in the Jetson they sit in its seat, hands on its two sticks.
 const eastHall = SERVICE_CENTRES.find((c) => c.id === 'east');
 // `along` metres along a hall's front from its middle and `out` from it, facing out.
 function inFrontOf(c, along, out) {
@@ -167,8 +170,12 @@ function inFrontOf(c, along, out) {
   const cos = Math.cos(yaw), sin = Math.sin(yaw);
   return { x: c.x + along * cos + out * sin, z: c.z - along * sin + out * cos, dx: sin, dz: cos };
 }
-// `cam`: the chase camera's distance back, height and look-ahead, and the
-// height it looks at; `wind`: how much of the wind you hear.
+// `cam`: the chase camera's distance back, height and look-ahead, the height it
+// looks at, how far round to the side it hangs at a crawl (radians, + to the
+// right) and how quickly it follows (6 if it doesn't say: the faster the
+// vehicle, the further it trails); `wind`: how much of the wind you hear; `lean`: how far the rider
+// leans into a turn; `flies`: it's an aircraft, with `hintLanded` its hint on
+// the ground.
 const vehicles = [
   {
     name: 'pickup', model: new Truck(), handling: PICKUP, hall: eastHall, park: inFrontOf(eastHall, -16, 33),
@@ -182,22 +189,30 @@ const vehicles = [
     title: 'Snowmobile', prompt: '<kbd>E</kbd> ride the <b>snowmobile</b>',
     hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ride · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get off',
   },
+  {
+    name: 'jetson', model: new Jetson(), handling: JETSON, flies: true, hall: eastHall, park: inFrontOf(eastHall, 4, 52),
+    cam: { back: 6.5, up: 3.4, ahead: 4, look: 0.9, side: -0.5, follow: 12 }, wind: 1, lean: 0.012,
+    title: 'Jetson ONE', prompt: '<kbd>E</kbd> fly the <b>Jetson ONE</b>',
+    hintLanded: '<kbd>Space</kbd> take off · <kbd>E</kbd> get out',
+    hint: '<kbd>W</kbd><kbd>S</kbd> fly · <kbd>A</kbd><kbd>D</kbd> turn · <kbd>Space</kbd> up · <kbd>Shift</kbd> down and land',
+  },
 ];
 const parked = () => vehicles.filter((v) => v.phys && v !== car).map((v) => v.model.footprint);
 for (const v of vehicles) {
   scene.add(v.model.root);
   v.phys = null; // once the model is in
-  // Its lines in the snow: a pickup's rear tyres, a snowmobile's track and skis.
+  // Its lines in the snow: a pickup's rear tyres, a snowmobile's track and skis
+  // (the Jetson leaves none).
   v.tracks = [];
   v.model.ready.then(() => {
-    v.phys = new VehiclePhysics({
+    v.phys = new (v.flies ? FlightPhysics : VehiclePhysics)({
       hf: detail, piste, forest, dims: v.model.dims, handling: v.handling,
       obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)],
     });
     v.phys.reset(v.park.x, v.park.z, yawOf(v.park.dx, v.park.dz));
     v.model.update(0, v.phys);
     v.tracks = v.model.marks.map(() => new Trail());
-    scene.add(...v.tracks.map((t) => t.mesh));
+    if (v.tracks.length) scene.add(...v.tracks.map((t) => t.mesh));
     phys.obstacles.push(v.model.footprint); // the rider runs into it
     // The vehicles bump into each other.
     for (const o of vehicles) if (o !== v && o.phys) { o.phys.obstacles.push(v.model.footprint); v.phys.obstacles.push(o.model.footprint); }
@@ -232,7 +247,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR' && !e.repeat && state === 'drive') carHome();
   if (e.code === 'KeyF' && !e.repeat && state === 'ride') toggleLocomotion();
   if (e.code === 'KeyM' && !e.repeat) openMap();
-  if (e.code === 'KeyE' && !e.repeat && state === 'drive') getOut();
+  if (e.code === 'KeyE' && !e.repeat && state === 'drive') {
+    if (car.phys.canExit === false) hud.toast('Land first · hold Shift', 1600);
+    else getOut();
+  }
   else if (e.code === 'KeyE' && !e.repeat && state === 'ride' && nearCar) getIn(nearCar);
   else if (e.code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((e.code === 'KeyE' || e.code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
@@ -242,7 +260,7 @@ window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 window.addEventListener('focusin', (e) => { if (isControl(e.target)) keys.clear(); });
 const input = { steer: 0, tuck: false, brake: false, jump: false, walk: false, run: false };
-const pedals = { throttle: false, reverse: false, steer: 0, handbrake: false }; // driving
+const pedals = { throttle: false, reverse: false, steer: 0, handbrake: false, climb: false, sink: false }; // driving and flying
 function readInput() {
   const L = keys.has('KeyA') || keys.has('ArrowLeft');
   const R = keys.has('KeyD') || keys.has('ArrowRight');
@@ -256,10 +274,12 @@ function readInput() {
   pedals.reverse = input.brake;
   pedals.steer = input.steer;
   pedals.handbrake = input.jump;
+  pedals.climb = input.jump;
+  pedals.sink = input.run;
 }
 
-// Back on the board. A rider seated on the snowmobile stays there; getting off
-// stands them up (see Driving).
+// Back on the board. A rider seated on the snowmobile or in the Jetson stays
+// there; getting off stands them up (see Driving).
 function restoreRide() {
   if (rider.locomotion === 'sit') return;
   const wasWalking = rider.locomotion === 'walk';
@@ -377,7 +397,8 @@ const introPanel = () => showPanel('Hemu · 禾木', `
     <span><kbd>W</kbd></span><span>tuck for speed · push along on the flat</span>
     <span><kbd>S</kbd></span><span>skid to scrub speed</span>
     <span><kbd>Space</kbd></span><span>hold and release to ollie · spin in the air</span>
-    <span><kbd>E</kbd></span><span>board a lift at its station · take the pickup or the snowmobile</span>
+    <span><kbd>E</kbd></span><span>board a lift at its station · take the pickup, the snowmobile or the Jetson ONE</span>
+    <span><kbd>Space</kbd><kbd>Shift</kbd></span><span>in the Jetson ONE: take off and climb / come down and land</span>
     <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose under Rider</span>
     <span><kbd>W</kbd><kbd>Shift</kbd></span><span>walk / run on foot · A/D turn · S stop</span>
     <span><kbd>R</kbd></span><span>back to the top</span>
@@ -651,8 +672,10 @@ function frame() {
       drive.step(STEP, pedals);
       acc -= STEP;
     }
-    for (const ev of drive.events.splice(0))
-      if (ev.type === 'crash') hud.toast(ev.reason === 'tree' ? 'Tree!' : 'Crunch!');
+    for (const ev of drive.events.splice(0)) {
+      if (ev.type === 'crash') hud.toast(ev.reason === 'tree' ? 'Tree!' : ev.reason === 'ground' ? 'Bump!' : 'Crunch!');
+      if (ev.type === 'landed') hud.toast('Landed', 1200);
+    }
     car.model.update(dt, drive);
     followCar();
     if (car.model.saddle) poseSeated(dt);
@@ -660,8 +683,11 @@ function frame() {
     if (timing) elapsed += dt;
     updateDriveCamera(dt);
     hud.update(phys, elapsed);
-    sound.update(drive.speed * car.wind, 0, false, {
-      kind: car.name, speed: Math.abs(drive.vel.dot(drive.forward(_f))), throttle: pedals.throttle || pedals.reverse,
+    if (car.flies) hud.prompt(drive.landed ? car.hintLanded : car.hint);
+    // The rotors' wash is a wind of its own.
+    sound.update(drive.speed * car.wind + (car.flies ? drive.spool * 12 : 0), 0, false, {
+      kind: car.name, speed: Math.abs(drive.vel.dot(drive.forward(_f))), spool: drive.spool, load: drive.load,
+      throttle: pedals.throttle || pedals.reverse || (car.flies && pedals.climb),
     });
   } else if (state === 'lift') {
     const label = `${liftRide.ride.label} ↑`;
@@ -693,6 +719,7 @@ function frame() {
   specks.update(dt, time, camera, titleDist, renderer.getPixelRatio());
   if (island.visible) island.update(time);
 
+  for (const v of vehicles) if (v !== car && v.phys?.spool > 0) { v.phys.coast(dt); v.model.update(dt, v.phys); }
   spray.update(dt);
   lifts.update(dt);
   forest.update(camera.position);
@@ -857,11 +884,14 @@ function facing(at, or) {
 }
 
 // ---------- Driving ----------
-// E beside a vehicle gets in: into the pickup's cab, out of sight, or onto the
-// snowmobile's seat, and the camera swings round behind it. W drives, S brakes
-// and then reverses, A/D steer, Space is the handbrake, R takes it back to its
-// spot by the hall. E gets out at the driver's door (or the nearest clear
+// E beside a vehicle gets in: into the pickup's cab, out of sight, onto the
+// snowmobile's seat or into the Jetson's, and the camera swings round behind
+// it. W drives, S brakes and then reverses, A/D steer, Space is the handbrake,
+// R takes it back to its spot by the hall. E gets out at the driver's door (or the nearest clear
 // side), on foot if you walked up, and the vehicle stays where you left it.
+// In the Jetson ONE you sit in its seat: Space lifts off and climbs, Shift comes
+// down and lands, W/S fly forward and back and A/D turn; you get out once it's
+// down, or hovering just above the snow.
 // While you drive, `phys` follows the vehicle, so the HUD, the GPS, the maps
 // and the diorama's "You" pin all see you where it is.
 let walkAfter = false; // walked up to it, so walk away from it
@@ -878,10 +908,11 @@ function getIn(v) {
   trail.gap(phys.pos);
   for (const t of v.tracks) t.gap(v.phys.pos);
   acc = 0;
-  hud.prompt(v.hint);
+  hud.prompt(v.flies && v.phys.landed ? v.hintLanded : v.hint);
   hud.toast(v.title, 1600);
 }
 function getOut() {
+  car.phys.land?.(); // hovering just above the snow, it sets down first
   const drive = car.phys, at = exitSpot();
   drive.vel.set(0, 0, 0);
   drive.yawRate = drive.accel = drive.lateral = 0;
@@ -905,7 +936,7 @@ function exitSpot() {
 }
 function followCar() {
   phys.pos.copy(car.phys.pos);
-  phys.vel.copy(car.phys.vel);
+  phys.vel.set(car.phys.vel.x, 0, car.phys.vel.z); // the HUD shows the speed over the ground
   phys.yaw = car.phys.yaw;
 }
 // Back to its spot by the hall, with you still at the wheel.
@@ -920,8 +951,9 @@ function carHome() {
   camera.lookAt(camLook);
   hud.toast(car.hall.zh, 2000);
 }
-// On the snowmobile: the rider's root follows its saddle, and they lean into
-// the turn and a little toward the steering (see Rider's seated pose).
+// On the snowmobile or in the Jetson: the rider's root follows its saddle, and
+// they lean into the turn and a little toward the steering (see Rider's seated
+// pose).
 const _hs = new THREE.Vector3();
 function poseSeated(dt) {
   const { saddle } = car.model;
@@ -930,12 +962,13 @@ function poseSeated(dt) {
   if (hop) hopping(dt);
   rider.update(dt, {
     crouch: 0, air: false, speed: car.phys.speed,
-    lean: THREE.MathUtils.clamp(car.phys.lateral * 0.04, -0.45, 0.45),
-    twist: car.phys.steer / car.handling.steer,
+    lean: THREE.MathUtils.clamp(car.phys.lateral * (car.lean ?? 0.04), -0.45, 0.45),
+    twist: car.phys.steer / (car.handling.steer ?? 1),
   });
 }
-// Getting on or off the snowmobile, the rider slides from where they were to
-// where they're going, while their pose blends from standing to sitting (or back).
+// Getting on or off the snowmobile (or into or out of the Jetson), the rider
+// slides from where they were to where they're going, while their pose blends
+// from standing to sitting (or back).
 const HOP = 0.35;
 let hop = null;
 const _hq = new THREE.Quaternion();
@@ -950,11 +983,15 @@ function hopping(dt) {
   if (hop.t >= HOP) hop = null;
 }
 // Chase camera: behind and above, pulling back with speed; it stays behind the
-// tail when you reverse.
+// tail when you reverse. The Jetson's hangs off to its left at a hover, where
+// you see the pilot past the seat back, and swings in behind as it speeds up.
+const Y_AXIS = new THREE.Vector3(0, 1, 0), _cd = new THREE.Vector3();
 function driveCameraTarget(out, look) {
   const drive = car.phys, { cam } = car;
   const sp = Math.min(drive.speed, 30);
-  out.copy(drive.pos).addScaledVector(camDir, -(cam.back + sp * 0.08));
+  _cd.copy(camDir);
+  if (cam.side) _cd.applyAxisAngle(Y_AXIS, cam.side * (1 - THREE.MathUtils.smoothstep(sp, 4, 20)));
+  out.copy(drive.pos).addScaledVector(_cd, -(cam.back + sp * 0.08));
   out.y += cam.up + sp * 0.02;
   out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 1.5);
   look.copy(drive.pos).addScaledVector(camDir, cam.ahead);
@@ -964,9 +1001,10 @@ function updateDriveCamera(dt) {
   const drive = car.phys;
   camDir.lerp(drive.forward(_v), 1 - Math.exp(-dt * 3)).normalize();
   driveCameraTarget(_w, _look);
-  camera.position.lerp(_w, 1 - Math.exp(-dt * 6));
+  const follow = car.cam.follow ?? 6;
+  camera.position.lerp(_w, 1 - Math.exp(-dt * follow));
   camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 1.2);
-  camLook.lerp(_look, 1 - Math.exp(-dt * 10));
+  camLook.lerp(_look, 1 - Math.exp(-dt * Math.max(10, follow)));
   camera.lookAt(camLook);
   camera.fov = 60 + Math.min(drive.speed, 30) * 0.35;
   camera.updateProjectionMatrix();

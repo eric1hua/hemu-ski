@@ -14,6 +14,7 @@ const GREEN = new THREE.Color('#4d7560');
 const GREEN_DARK = new THREE.Color('#3d6352');
 const SNOW = new THREE.Color('#f6f7f2');
 const TRUNK = new THREE.Color('#6b5248');
+const TREE_HEIGHT = 11.8; // the near tree's tip, before scaling
 
 function paint(geo, fn) {
   const g = geo.index ? geo.toNonIndexed() : geo;
@@ -179,7 +180,7 @@ export function createForest(hf, piste, lifts, { chunk = 250, lodDistance = 450,
     const ck = `${Math.floor(t.x / 10)},${Math.floor(t.z / 10)}`;
     let cl = colliders.get(ck);
     if (!cl) colliders.set(ck, (cl = []));
-    cl.push({ x: t.x, z: t.z, r: 0.45 * t.s + 0.15 });
+    cl.push({ x: t.x, z: t.z, r: 0.45 * t.s + 0.15, top: p.y + TREE_HEIGHT * t.sy });
   }
   const count = trees.length;
 
@@ -229,7 +230,8 @@ export function createForest(hf, piste, lifts, { chunk = 250, lodDistance = 450,
         }
       }
     },
-    // Nearest trunk overlap with a circle at (x, z), or null.
+    // Nearest trunk overlap with a circle at (x, z), or null: { x, z, r, top },
+    // `top` the height of its tip.
     hit(x, z, r) {
       const i0 = Math.floor(x / 10), j0 = Math.floor(z / 10);
       for (let j = j0 - 1; j <= j0 + 1; j++)

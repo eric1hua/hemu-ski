@@ -1,5 +1,5 @@
 // Procedural sound: wind that rises with speed, a scrape for edge/skid, and the
-// engine of the pickup or the snowmobile.
+// engine of the pickup or the snowmobile, or the Jetson ONE's rotors.
 // Effects and music play through their own buses, switched from the menu.
 export class Sound {
   constructor() {
@@ -66,9 +66,11 @@ export class Sound {
     this.musicOn = on;
     if (this.ctx) this.music.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.05);
   }
-  // `engine` ({ kind, speed, throttle }) while you drive, else null. The
-  // pickup's note climbs through its gears; the snowmobile's two-stroke buzzes
-  // higher, its belt drive holding the revs up as it gathers speed.
+  // `engine` ({ kind, speed, throttle, spool?, load? }) while you drive, else
+  // null. The pickup's note climbs through its gears; the snowmobile's
+  // two-stroke buzzes higher, its belt drive holding the revs up as it gathers
+  // speed; the Jetson's eight rotors whine up as they spool (`spool`, 0…1) and
+  // as they pull harder (`load`).
   update(speed, slip, grounded, engine = null) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -79,7 +81,11 @@ export class Sound {
     this.scrapeG.gain.setTargetAtTime(grounded ? 0.015 + s * 0.12 : 0, t, 0.05);
     const load = engine?.throttle ? 1 : 0;
     let hz, open;
-    if (engine?.kind === 'snowmobile') {
+    if (engine?.kind === 'jetson') {
+      const rev = engine.spool * (0.55 + engine.load * 0.45);
+      hz = 60 + rev * 120;
+      open = 500 + rev * 1700;
+    } else if (engine?.kind === 'snowmobile') {
       const rev = load * 0.45 + 0.15 + Math.min(1, engine.speed / 55) * 0.4;
       hz = 58 + rev * 120;
       open = 380 + rev * 900 + load * 300;
@@ -92,6 +98,6 @@ export class Sound {
     }
     this.eng.forEach((o, i) => o.frequency.setTargetAtTime(i ? hz / 2 : hz, t, 0.08));
     this.engF.frequency.setTargetAtTime(open, t, 0.08);
-    this.engG.gain.setTargetAtTime(engine ? 0.05 + load * 0.05 : 0, t, engine ? 0.1 : 0.3);
+    this.engG.gain.setTargetAtTime(engine ? (0.05 + load * 0.05) * (engine.spool ?? 1) : 0, t, engine ? 0.1 : 0.3);
   }
 }
