@@ -7,23 +7,39 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
 
 // `seat`: how high the Hips bone sits above a seat's cushion (metres), for the
-// thighs' thickness.
+// thighs' thickness. `outfits`: other sets of clothes, each a whole model on
+// the same Mixamo skeleton (Tripo can't take clothes off a model), sized to the
+// rider's own by the skeleton rather than by height; `seat` can differ there.
+// `clips`: the model's own clips by what they're for, each named by how its
+// name starts (Tripo cuts names off at 63 characters).
 export const RIDER_MODELS = {
   male: { file: 'player.glb', height: 1.7, seat: 0.16 },
   // Includes the cat ears: keep her body scale independent of the male's hat.
-  female: { file: 'female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb', height: 1.8, seat: 0.15 },
+  female: {
+    file: 'female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb', height: 1.8, seat: 0.15,
+    // For the hot spring, with the clips for getting in (see Soaking in main.js).
+    // It has no clip for undressing: she changes in a puff of steam instead.
+    outfits: {
+      swim: {
+        file: 'female-rider/female-rider-swim-v01.glb',
+        clips: { ledge: 'Go upstairs, then go downstairs', wade: 'walk', sitDown: 'Like stepping down a few steps' },
+      },
+    },
+  },
 };
 const BOARD_TOP = 0.025;
 const FADE = 0.25;
 const loading = new Map();
-export function loadRiderModel(id = 'male') {
+export function loadRiderModel(id = 'male', outfit = null) {
   const spec = RIDER_MODELS[id];
-  if (!spec) throw new Error(`Unknown rider: ${id}`);
-  if (!loading.has(id)) {
-    loading.set(id, new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/' + spec.file)
-      .catch((err) => { loading.delete(id); throw err; }));
+  const file = outfit ? spec?.outfits?.[outfit]?.file : spec?.file;
+  if (!file) throw new Error(`Unknown rider: ${id}${outfit ? ` in ${outfit}` : ''}`);
+  const key = outfit ? `${id}:${outfit}` : id;
+  if (!loading.has(key)) {
+    loading.set(key, new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/' + file)
+      .catch((err) => { loading.delete(key); throw err; }));
   }
-  return loading.get(id);
+  return loading.get(key);
 }
 
 // Bones driven each frame. The clavicles (Shoulder) and Spine2 stay at the bind
@@ -38,7 +54,10 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _a = new THREE.Vector3
 const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _e = new THREE.Euler();
 
 export class RiderModel {
-  constructor(gltf, id = 'male') {
+  // `outfit` names one of RIDER_MODELS[id].outfits, sized to `fit`: the
+  // RiderModel of the rider's own clothes.
+  constructor(gltf, id = 'male', { outfit = null, fit = null } = {}) {
+    const spec = RIDER_MODELS[id], wearing = outfit ? spec.outfits[outfit] : spec;
     const scene = clone(gltf.scene);
     scene.traverse((o) => {
       if (!o.isMesh) return;
@@ -51,8 +70,19 @@ export class RiderModel {
     this.root = new THREE.Group();
     this.root.name = 'RiderModel';
     this.root.add(scene);
+    const byName = {};
+    scene.traverse((bone) => {
+      if (bone.isBone) byName[bone.name.replace(/^mixamorig:?/, '')] = bone;
+    });
+    const missing = DRIVEN.filter((n) => !byName[n]);
+    if (missing.length) throw new Error(`${wearing.file} is missing Mixamo bones: ${missing.join(', ')}`);
+    // The trunk, from the Hips joint up to the Head joint (model units): what
+    // sizes another set of clothes to the rider's own, since neither a hat nor
+    // boots reach it. The rider's own clothes go by their height.
+    this.root.updateMatrixWorld(true);
+    this.trunk = byName.Head.getWorldPosition(_v).y - byName.Hips.getWorldPosition(_w).y;
     const box = new THREE.Box3().setFromObject(scene);
-    this.scale = RIDER_MODELS[id].height / (box.max.y - box.min.y);
+    this.scale = fit ? (fit.scale * fit.trunk) / this.trunk : spec.height / (box.max.y - box.min.y);
     this.root.scale.setScalar(this.scale);
     this.root.position.y = BOARD_TOP - box.min.y * this.scale;
     this.root.updateMatrixWorld(true);
@@ -61,11 +91,8 @@ export class RiderModel {
     // space (so a model-space rotation can be applied relative to the parent).
     this.bones = {};
     this.rest = [];
-    const byName = {};
     scene.traverse((bone) => {
-      if (!bone.isBone) return;
-      this.rest.push({ bone, p: bone.position.clone(), q: bone.quaternion.clone(), s: bone.scale.clone() });
-      byName[bone.name.replace(/^mixamorig:?/, '')] = bone;
+      if (bone.isBone) this.rest.push({ bone, p: bone.position.clone(), q: bone.quaternion.clone(), s: bone.scale.clone() });
     });
     // Keep mixer targets separate: PropertyMixer caches unchanged track values.
     // Fading on its target bones would leave a frozen clip stuck halfway.
@@ -79,7 +106,15 @@ export class RiderModel {
       this.walk = this.mixer.clipAction(this.walk).play();
       this.run = this.mixer.clipAction(this.run).play();
     }
+    this.clips = {};
+    for (const [role, name] of Object.entries(wearing.clips ?? {})) {
+      const clip = gltf.animations.find((c) => c.name.startsWith(name));
+      if (clip) this.clips[role] = clip;
+      else console.warn(`${wearing.file} has no clip named "${name}…" (for ${role}).`);
+    }
+    this.acts = new Map(); // clip → its action, for 'act'
     this.mode = 'ride';
+    this.clip = null;
     this.fade = FADE;
     this.transition = null;
     const rootQinv = this.root.getWorldQuaternion(new THREE.Quaternion()).invert();
@@ -97,8 +132,6 @@ export class RiderModel {
         modelQ: rootQinv.clone().multiply(o.getWorldQuaternion(new THREE.Quaternion())),
       };
     });
-    const missing = DRIVEN.filter((n) => !this.bones[n]);
-    if (missing.length) throw new Error(`player.glb is missing Mixamo bones: ${missing.join(', ')}`);
 
     // Bind-pose geometry the IK and arm mapping need (model units).
     const pos = (n) => this.root.worldToLocal(this.bones[n].bone.getWorldPosition(new THREE.Vector3()));
@@ -120,7 +153,7 @@ export class RiderModel {
     // The rider's build, for Rider's seated pose (body units): as its CLASSIC_BUILD.
     const S = this.scale;
     this.build = {
-      seat: RIDER_MODELS[id].seat,
+      seat: wearing.seat ?? spec.seat,
       pivot: (pos('Spine').y - pos('Hips').y) * S,
       shoulder: [Math.abs(pos('LeftArm').x - pos('Hips').x) * S, (pos('LeftArm').y - pos('Spine').y) * S],
       reach: (this.upperArm + this.foreArm + this.palm) * S,
@@ -139,13 +172,38 @@ export class RiderModel {
         }
   }
 
+  // Takes up `mode` (and in 'act', `clip`) at once, with no fade from the pose
+  // it was last left in: for a set of clothes changed into mid-pose.
+  snapTo(mode, clip = null) {
+    this.mode = mode;
+    this.clip = clip;
+    this.transition = null;
+    this.fade = FADE;
+  }
+
+  // 'act' plays `rider.act`: { clip, time }, a clip at a time the rider sets
+  // rather than one the mixer runs on, so clothes changed into mid-clip carry
+  // on from the same frame. Any clip on the Mixamo skeleton plays, whichever
+  // model it came with. Changing clips fades as changing modes does.
   update(dt, rider, mode, speed) {
-    if (mode !== this.mode) {
+    const clip = mode === 'act' ? rider.act.clip : null;
+    if (mode !== this.mode || clip !== this.clip) {
       this.transition = this.rest.map(({ bone }) => ({ p: bone.position.clone(), q: bone.quaternion.clone(), s: bone.scale.clone() }));
       this.fade = 0;
       this.mode = mode;
+      this.clip = clip;
     }
-    if (mode === 'walk' && this.canWalk) {
+    if (mode === 'act') {
+      const action = this.#act(this.mixer, clip, this.acts);
+      for (const a of this.acts.values()) if (a !== action) a.stop();
+      this.walk?.setEffectiveWeight?.(0);
+      this.run?.setEffectiveWeight?.(0);
+      action.play();
+      action.time = THREE.MathUtils.clamp(rider.act.time, 0, clip.duration);
+      this.mixer.update(0);
+      this.#copyAnimated();
+    } else if (mode === 'walk' && this.canWalk) {
+      for (const a of this.acts.values()) a.stop();
       const blend = THREE.MathUtils.smoothstep(speed, 1.5, 4);
       this.walk.setEffectiveWeight(1 - blend);
       this.run.setEffectiveWeight(blend);
@@ -153,11 +211,7 @@ export class RiderModel {
       this.walk.setEffectiveTimeScale(speed < 0.05 ? 0 : THREE.MathUtils.clamp(speed / 1.4, 0.25, 1.5));
       this.run.setEffectiveTimeScale(speed < 0.05 ? 0 : THREE.MathUtils.clamp(speed / 4, 0.25, 1.5));
       this.mixer.update(dt);
-      for (const { bone, animated } of this.rest) {
-        bone.position.copy(animated.position);
-        bone.quaternion.copy(animated.quaternion);
-        bone.scale.copy(animated.scale);
-      }
+      this.#copyAnimated();
     } else {
       // Clips animate all 65 bones; restore all of them before procedural posing.
       for (const { bone, p, q, s } of this.rest) {
@@ -176,6 +230,59 @@ export class RiderModel {
       });
       if (this.fade === FADE) this.transition = null;
     }
+  }
+
+  #copyAnimated() {
+    for (const { bone, animated } of this.rest) {
+      bone.position.copy(animated.position);
+      bone.quaternion.copy(animated.quaternion);
+      bone.scale.copy(animated.scale);
+    }
+  }
+
+  // `clip`'s action on `mixer`, played once and held at its end: a time past
+  // the end is the last frame, not the first again.
+  #act(mixer, clip, actions) {
+    let action = actions.get(clip);
+    if (!action) {
+      action = mixer.clipAction(clip).setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      actions.set(clip, action);
+    }
+    return action;
+  }
+
+  // How high the Mixamo bone `name` (e.g. 'LeftArm') stands over the rider's
+  // root (metres) at `time` into `clip`, posed on a copy, leaving this one be.
+  heightIn(clip, time, name) {
+    if (!this.probe) {
+      const scene = clone(this.animationScene);
+      const bones = {};
+      scene.traverse((o) => { if (o.isBone) bones[o.name.replace(/^mixamorig:?/, '')] = o; });
+      this.probe = { scene, bones, mixer: new THREE.AnimationMixer(scene), actions: new Map() };
+    }
+    const { scene, bones, mixer, actions } = this.probe;
+    mixer.stopAllAction();
+    const action = this.#act(mixer, clip, actions).play();
+    action.time = time;
+    mixer.update(0);
+    scene.updateMatrixWorld(true);
+    return this.root.position.y + bones[name].getWorldPosition(_v).y * this.scale;
+  }
+
+  // How far `clip` has raised the Hips joint by `time` from where it starts
+  // (metres, at this model's size): for fitting a clip's steps up and down to
+  // the heights of real ones.
+  rise(clip, time) {
+    this.hipsAt ||= new Map();
+    let at = this.hipsAt.get(clip);
+    if (!at) {
+      const name = `${this.bones.Hips.bone.name}.position`;
+      at = clip.tracks.find((t) => t.name === name).createInterpolant();
+      this.hipsAt.set(clip, at);
+    }
+    const y = at.evaluate(time)[1];
+    return (y - at.evaluate(0)[1]) * this.scale;
   }
 
   // Rotate a bone by `d` (a model-space rotation) relative to its parent.

@@ -168,10 +168,14 @@ export class Rider {
 
     this.pose = { crouch: 0.4, lean: 0, twist: 0, armSwing: 0, air: 0, tumble: 0 };
     this.t = 0;
-    this.model = null;
+    this.model = null; // the rigged rider as worn: their own clothes (`base`) or an `outfit`
+    this.base = null;
+    this.outfit = null;
     this.modelId = 'classic';
     this.locomotion = 'ride';
+    this.act = null; // in 'act': { clip, time }, see play()
     this.models = new Map();
+    this.outfits = new Map(); // 'id:outfit' → { promise, model }
     this.selection = 0;
     if (model) this.selectModel(model === true ? 'male' : model).catch((err) => console.warn('Rider model unavailable.', err));
   }
@@ -195,7 +199,8 @@ export class Rider {
     if (selection !== this.selection) return false;
     if (this.locomotion !== 'sit') this.setLocomotion('ride'); // a seated rider stays on the seat
     if (this.model) this.body.remove(this.model.root);
-    this.model = model;
+    this.model = this.base = model;
+    this.outfit = null;
     this.modelId = id;
     if (model) this.body.add(model.root);
     this.classic.visible = !model;
@@ -209,19 +214,84 @@ export class Rider {
     return this.model?.build ?? CLASSIC_BUILD;
   }
 
+  // Whether this rider walks and runs off the board (their own clothes carry the clips).
+  get canWalk() {
+    return !!this.base?.canWalk;
+  }
+
+  // Outfits: other sets of clothes for the rigged riders (RIDER_MODELS[id].outfits,
+  // e.g. 'swim'); null is their own. This starts loading one.
+  preloadOutfit(outfit) {
+    if (outfit && this.base) this.#outfit(outfit);
+  }
+
+  // The model for `outfit`, if it has loaded (for its `clips`).
+  outfitModel(outfit) {
+    return (this.base && this.outfits.get(`${this.modelId}:${outfit}`)?.model) || null;
+  }
+
+  // Resolves true once changing into `outfit` would change what's on; false
+  // for a rider without it, if it won't load, or if it's on already.
+  async loadOutfit(outfit) {
+    const id = this.modelId;
+    const model = outfit ? this.base && (await this.#outfit(outfit).promise) : this.base;
+    return !!model && id === this.modelId && model !== this.model;
+  }
+
+  // Changes into `outfit` (as loadOutfit) at once, in the pose the rider is in,
+  // if it has loaded.
+  wear(outfit) {
+    const model = outfit ? this.base && this.#outfit(outfit).model : this.base;
+    if (!model || model === this.model) return false;
+    this.body.remove(this.model.root);
+    this.model = model;
+    this.outfit = outfit;
+    this.body.add(model.root);
+    model.snapTo(this.locomotion, this.locomotion === 'act' ? this.act.clip : null);
+    model.update(0, this, this.locomotion, 0);
+    return true;
+  }
+
+  #outfit(outfit) {
+    const id = this.modelId, base = this.base, key = `${id}:${outfit}`;
+    let entry = this.outfits.get(key);
+    if (!entry) {
+      entry = { model: null };
+      entry.promise = import('./rider-model.js')
+        .then(async ({ RIDER_MODELS, loadRiderModel, RiderModel }) => {
+          if (!RIDER_MODELS[id].outfits?.[outfit]) return null;
+          entry.model = new RiderModel(await loadRiderModel(id, outfit), id, { outfit, fit: base });
+          return entry.model;
+        })
+        .catch((err) => { console.warn(`No ${outfit} outfit for the ${id} rider; keeping their own clothes.`, err); return null; });
+      this.outfits.set(key, entry);
+    }
+    return entry;
+  }
+
   // 'ride' on the board, 'walk' on foot (riders with walk and run clips), or
   // 'sit' on a vehicle's `seat`: { hips, feet: [left, right], grips: [left,
   // right], kneeOut }, the cushion under the hips, the soles' spots and the
   // handlebar grips, in the body's frame (+z forward, +x left), the root
   // following the vehicle, and how far the knees spread (0.45 if it doesn't say).
+  // 'act' is for play().
   setLocomotion(mode, seat = this.seat) {
-    if (mode === 'walk' && !this.model?.canWalk) return false;
+    if (mode === 'walk' && !this.canWalk) return false;
     if (mode === 'sit' && !seat) return false;
+    if (mode === 'act' && !(this.model && this.act)) return false;
     this.seat = seat;
     if (mode !== 'sit') this.feet.forEach((f, i) => f.position.copy(this.stance[i]));
     this.locomotion = mode;
     this.#gearVisibility();
     return true;
+  }
+
+  // Plays `clip` (an AnimationClip on the Mixamo skeleton) at `time` s, off the
+  // board, the root placed by the caller: the rigged riders only. Called each
+  // frame with the time moving on; another clip fades in from the pose so far.
+  play(clip, time) {
+    this.act = { clip, time };
+    return this.locomotion === 'act' || this.setLocomotion('act');
   }
 
   #gearVisibility() {
@@ -408,10 +478,10 @@ export class Rider {
     // Crash tumble.
     this.body.rotation.x = p.tumble;
 
-    const walking = this.locomotion === 'walk';
-    const targetYaw = walking || sitting ? Math.PI : Math.PI / 2;
+    const afoot = this.locomotion === 'walk' || this.locomotion === 'act';
+    const targetYaw = afoot || sitting ? Math.PI : Math.PI / 2;
     this.body.rotation.y += (targetYaw - this.body.rotation.y) * Math.min(1, dt / 0.08);
-    if (walking || sitting) { this.edge.rotation.z = 0; this.body.rotation.x = 0; }
+    if (afoot || sitting) { this.edge.rotation.z = 0; this.body.rotation.x = 0; }
     this.model?.update(dt, this, this.locomotion, s.speed || 0);
   }
 

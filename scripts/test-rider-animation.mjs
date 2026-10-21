@@ -1,5 +1,5 @@
 // Run: node scripts/test-rider-animation.mjs
-// Uses the actual female GLB rig/clips; omits only texture material references
+// Uses the actual female GLB rigs/clips (ski gear and swimsuit); omits only texture material references
 // so the regression runs in Node without browser image loaders or a WebGL context.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -13,21 +13,25 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const server = await createServer({ root, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
 try {
   const { RiderModel } = await server.ssrLoadModule('/src/player/rider-model.js');
-  const source = await readFile(new URL('../public/models/female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb', import.meta.url));
-  const jsonLength = source.readUInt32LE(12);
-  const json = JSON.parse(source.subarray(20, 20 + jsonLength));
-  json.materials = (json.materials || []).map(() => ({ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }));
-  const jsonBytes = Buffer.from(JSON.stringify(json));
-  const paddedJson = Buffer.concat([jsonBytes, Buffer.alloc((4 - jsonBytes.length % 4) % 4, 0x20)]);
-  const binaryChunk = source.subarray(20 + jsonLength);
-  const header = Buffer.alloc(20);
-  header.writeUInt32LE(0x46546c67, 0); // glTF
-  header.writeUInt32LE(2, 4);
-  header.writeUInt32LE(20 + paddedJson.length + binaryChunk.length, 8);
-  header.writeUInt32LE(paddedJson.length, 12);
-  header.writeUInt32LE(0x4e4f534a, 16); // JSON
-  const bytes = Buffer.concat([header, paddedJson, binaryChunk]);
-  const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+  // The GLB with its textures left out.
+  async function load(file) {
+    const source = await readFile(new URL(`../public/models/female-rider/${file}`, import.meta.url));
+    const jsonLength = source.readUInt32LE(12);
+    const json = JSON.parse(source.subarray(20, 20 + jsonLength));
+    json.materials = (json.materials || []).map(() => ({ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }));
+    const jsonBytes = Buffer.from(JSON.stringify(json));
+    const paddedJson = Buffer.concat([jsonBytes, Buffer.alloc((4 - jsonBytes.length % 4) % 4, 0x20)]);
+    const binaryChunk = source.subarray(20 + jsonLength);
+    const header = Buffer.alloc(20);
+    header.writeUInt32LE(0x46546c67, 0); // glTF
+    header.writeUInt32LE(2, 4);
+    header.writeUInt32LE(20 + paddedJson.length + binaryChunk.length, 8);
+    header.writeUInt32LE(paddedJson.length, 12);
+    header.writeUInt32LE(0x4e4f534a, 16); // JSON
+    const bytes = Buffer.concat([header, paddedJson, binaryChunk]);
+    return new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+  }
+  const gltf = await load('female-rider-rigfix-walk-run-tex2k-v03.glb');
 
   const group = () => new THREE.Group();
   const rider = {
@@ -46,15 +50,15 @@ try {
 
   const model = new RiderModel(gltf, 'female');
   assert.equal(model.canWalk, true, 'actual female asset must provide both walk and run');
-  const frames = (mode, speed, count = 60) => {
-    for (let i = 0; i < count; i++) model.update(1 / 60, rider, mode, speed);
+  const frames = (mode, speed, count = 60, subject = model) => {
+    for (let i = 0; i < count; i++) subject.update(1 / 60, rider, mode, speed);
   };
-  function assertPose(expected, label) {
+  function assertPose(expected, label, subject = model) {
     let count = 0;
     expected.traverse((bone) => {
       if (!bone.isBone) return;
       count++;
-      const actual = model.root.getObjectByName(bone.name);
+      const actual = subject.root.getObjectByName(bone.name);
       assert(actual, `${label}: missing ${bone.name}`);
       assert(actual.position.distanceTo(bone.position) < 1e-6, `${label}: ${bone.name} position`);
       // GLB float quaternions can be slightly non-unit even when identical.
@@ -92,6 +96,42 @@ try {
   assertPose(freshRide.root, 'run -> ride restores all bones including undriven bones');
   frames('walk', 0);
   assertAuthoredPose(0, 'walk/run -> ride -> frozen idle');
+
+  // The swimsuit's clips, as the hot spring plays them: 'act', at a set time.
+  const swimGltf = await load('female-rider-swim-v01.glb');
+  const swim = new RiderModel(swimGltf, 'female', { outfit: 'swim', fit: model });
+  assert.deepEqual(Object.keys(swim.clips).sort(), ['ledge', 'sitDown', 'wade'], 'swimsuit clips found by role');
+  function assertClipPose(subject, source, clip, time, label) {
+    const expected = clone(source.scene);
+    const mixer = new THREE.AnimationMixer(expected);
+    const action = mixer.clipAction(clip).setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.play().time = time;
+    mixer.update(0);
+    assertPose(expected, label, subject);
+  }
+  const act = (subject, clip, time) => {
+    rider.act = { clip, time };
+    frames('act', 0, 30, subject);
+  };
+  const { ledge, sitDown } = swim.clips;
+  act(swim, ledge, 1.5);
+  assertClipPose(swim, swimGltf, ledge, 1.5, 'act: ledge clip mid-way');
+  act(swim, sitDown, sitDown.duration);
+  assertClipPose(swim, swimGltf, sitDown, sitDown.duration, 'act: the end of a clip holds its last frame');
+  // The ski model plays them too (same skeleton), as it does while the puff covers the change.
+  act(model, ledge, 0);
+  assertClipPose(model, gltf, ledge, 0, 'act: a swimsuit clip on the ski model');
+  frames('walk', 1.4);
+  assertAuthoredPose(1.4, 'act -> walking, the clip let go');
+  frames('ride', 0);
+  assertPose(freshRide.root, 'act -> ride restores all bones');
+  // What getting in fits to the pool: the step up, and how low she sits.
+  const top = Math.max(...Array.from({ length: 151 }, (_, i) => swim.rise(ledge, (i / 150) * ledge.duration)));
+  assert(top > 0.3 && top < 0.6, `ledge clip steps up ${top.toFixed(3)} m`);
+  const sat = swim.heightIn(sitDown, sitDown.duration, 'LeftArm'), stood = swim.heightIn(sitDown, 0, 'LeftArm');
+  assert(stood - sat > 0.6 && sat > 0.3, `shoulders ${stood.toFixed(2)} m standing, ${sat.toFixed(2)} m sat down`);
+  console.log(`PASS fitting: steps up ${top.toFixed(2)} m; shoulders ${stood.toFixed(2)} m standing, ${sat.toFixed(2)} m sat down`);
 } finally {
   await server.close();
 }

@@ -28,6 +28,10 @@ const TROUGH = { x: -0.04, y: 0.48, from: 0.1, lip: 0.488 };
 const ROCK_AT = { x: 3.3, z: 0.12 }; // in the pool's frame, turned to pour toward -x
 // The water's edge tucks this far under the rocks.
 const TUCK = 0.15;
+// The way in, straight in over the flat stone across the gap: measured off the
+// ring, the stone spans x 0.1–1.1 and z 2.8–3.4, 0.7 m up. From the snow
+// outside it (`shore`), onto it, and down onto the pool floor inside.
+const WAY = { x: 0.6, shore: 3.5, stone: 3.3, water: 2.45 };
 
 const WATER_COLORS = { deep: '#86cbbf', pale: '#b3e3d8', foam: '#f3faf6' };
 // Steam drifts downwind (m/s, world).
@@ -76,6 +80,9 @@ export function createOnsen(hf, { x, z, faceTo }) {
   };
   const drift = along(0, 1).multiplyScalar(0.18);
   uniforms.uDrift.value.set(drift.x, drift.z);
+  const puff = createPuff(group);
+  group.add(puff);
+  let puffAt = null, puffAge = PUFF_LIFE;
 
   const onsen = {
     group,
@@ -85,10 +92,23 @@ export function createOnsen(hf, { x, z, faceTo }) {
     // outside the gap, facing away. Set again once the ring's shape is known.
     seat: { x: 0, z: 0, dx: 1, dz: 0 },
     exit: null,
+    // The way in, once the ring is in: `shore`, `stone` and `water` (world, each
+    // on the ground there), and the way they go (dx, dz).
+    way: null,
     fall: null, // where the stream lands (world), once it's in
+    // The top of the rocks or the pool floor under (x, z) (world), once the
+    // ring is in; null off it.
+    floorAt: () => null,
     // Close enough to the ring to get in.
     near(px, pz) {
       return Math.hypot(px - x, pz - z) < RING * 0.5 + 1.8;
+    },
+    // A puff of steam round `at` (a rider's feet, world, followed while they
+    // slide in or out), thick by PUFF_COVER s.
+    puff(at) {
+      puffAt = at;
+      puffAge = 0;
+      puff.visible = true;
     },
     update(dt, time, soaker) {
       uniforms.uTime.value = time;
@@ -96,6 +116,12 @@ export function createOnsen(hf, { x, z, faceTo }) {
       const S = uniforms.uSoak.value;
       if (soaker) S.set(soaker.x, soaker.z, S.z + (1 - S.z) * k);
       else S.z -= S.z * k;
+      if (puff.visible) {
+        if (puffAge < PUFF_FOLLOW) group.worldToLocal(puff.material.uniforms.uOrigin.value.copy(puffAt).add(PUFF_LIFT));
+        puffAge += dt;
+        puff.material.uniforms.uAge.value = puffAge;
+        puff.visible = puffAge < PUFF_LIFE;
+      }
     },
     ready: null,
   };
@@ -118,7 +144,23 @@ export function createOnsen(hf, { x, z, faceTo }) {
       group.add(rocky(placed(rock, [1, 1, 1]).applyMatrix4(rockM)));
 
       // The water: out to where the rocks rise through it, tucked under them.
-      const edge = waterEdge(heightGrid(ringGeo, RING / 2, 0.05));
+      const grid = heightGrid(ringGeo, RING / 2, 0.05);
+      const edge = waterEdge(grid);
+      const _p = new THREE.Vector3();
+      onsen.floorAt = (wx, wz) => {
+        group.worldToLocal(_p.set(wx, 0, wz));
+        const y = grid.at(_p.x, _p.z);
+        return y < 0 ? null : base + y;
+      };
+      const on = (lz, y) => toWorld(WAY.x, lz).setY(y);
+      const shore = toWorld(WAY.x, WAY.shore), inward = along(0, -1);
+      onsen.way = {
+        shore: shore.setY(hf.heightAt(shore.x, shore.z)),
+        stone: on(WAY.stone, base + grid.at(WAY.x, WAY.stone)),
+        water: on(WAY.water, base + grid.at(WAY.x, WAY.water)),
+        dx: inward.x,
+        dz: inward.z,
+      };
       const water = new THREE.Mesh(waterGeometry(edge), waterMaterial(uniforms));
       water.position.y = WATER;
       water.receiveShadow = true;
@@ -470,29 +512,118 @@ function createSteam(edge, fall, uniforms, group) {
         vLife = life;
         #include <fog_vertex>
       }`,
-    fragmentShader: /* glsl */ `
-      #include <fog_pars_fragment>
-      uniform vec3 uShadowTint;
-      varying vec2 vCorner;
-      varying float vAlpha, vKey, vLife;
-      ${NOISE}
-      void main() {
-        float d = length(vCorner) + (oNoise(vCorner * 2.2 + vKey) - 0.5) * 0.45;
-        float body = 1.0 - smoothstep(0.62, 0.68, d);
-        if (body * vAlpha < 0.01) discard;
-        float core = 1.0 - smoothstep(0.32, 0.38, d + vCorner.y * 0.25);
-        vec3 col = mix(mix(vec3(1.0), uShadowTint, 0.35), vec3(1.0), core);
-        col = mix(col * mix(uShadowTint, vec3(1.0), 0.7), col, smoothstep(0.0, 0.4, vLife));
-        gl_FragColor = vec4(col, body * vAlpha * (0.75 + 0.25 * core));
-        #include <colorspace_fragment>
-        #include <fog_fragment>
-      }`,
+    fragmentShader: STEAM_FRAGMENT,
   });
   const steam = new THREE.Mesh(g, mat);
   steam.name = 'Steam';
   steam.renderOrder = 2;
   return steam;
 }
+
+// A puff of steam round a rider changing as they get in or out: as the pool's
+// steam, but thick, in at once, and gone in about a second. Its
+// middle (`uOrigin`, the pool's frame) follows the rider for the first half
+// second, while they slide in or out, and then lets them go.
+export const PUFF_COVER = 0.15;
+const PUFF_LIFE = 1.5, PUFF_FOLLOW = 0.5; // the last puff's delay and life, at most
+const PUFF_LIFT = new THREE.Vector3(0, 0.55, 0); // the puff's foot above the rider's feet
+function createPuff(group) {
+  const rnd = mulberry(20261021);
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  const offset = [], corner = [], seed = [], key = [], idx = [];
+  // From the knees to over the head of a rider standing by the pool (below the
+  // surface, for one in it), and out past their hands.
+  for (let i = 0; i < 26; i++) {
+    const a = rnd() * Math.PI * 2, r = 0.2 + rnd() * 0.45;
+    const o = [Math.cos(a) * r, -0.35 + rnd() * 1.4, Math.sin(a) * r];
+    // [delay (s), life (s), rise (m), size (m)]: most at once, a few billowing after.
+    const s = [i < 18 ? 0 : rnd() * 0.25, 0.8 + rnd() * 0.4, 0.4 + rnd() * 0.6, 1.3 + rnd() * 0.8];
+    const k = rnd() * 10;
+    for (const c of corners) {
+      offset.push(...o);
+      corner.push(...c);
+      seed.push(...s);
+      key.push(k);
+    }
+    const v = i * 4;
+    idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  // `position` is each puff's offset from the middle; no normals, so the ink pass skips it.
+  g.setAttribute('position', new THREE.Float32BufferAttribute(offset, 3));
+  g.setAttribute('corner', new THREE.Float32BufferAttribute(corner, 2));
+  g.setAttribute('seed', new THREE.Float32BufferAttribute(seed, 4));
+  g.setAttribute('key', new THREE.Float32BufferAttribute(key, 1));
+  g.setIndex(idx);
+
+  const wind = WIND.clone().applyQuaternion(group.quaternion.clone().invert());
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+      uAge: { value: PUFF_LIFE },
+      uOrigin: { value: new THREE.Vector3() },
+      uWind: { value: wind },
+      uShadowTint: toonUniforms.uShadowTint,
+    },
+    fog: true,
+    transparent: true,
+    depthWrite: false,
+    vertexShader: /* glsl */ `
+      #include <fog_pars_vertex>
+      attribute vec2 corner;
+      attribute vec4 seed; // delay (s), life (s), rise (m), size (m)
+      attribute float key; // a random offset for the blob's outline
+      uniform float uAge;
+      uniform vec3 uOrigin, uWind;
+      varying vec2 vCorner;
+      varying float vAlpha, vKey, vLife;
+      void main() {
+        float t = uAge - seed.x;
+        float life = clamp(t / seed.y, 0.0, 1.0);
+        vec3 c = uOrigin + position * (1.0 + 0.5 * life); // spreading as it goes
+        c.y += seed.z * (1.0 - (1.0 - life) * (1.0 - life));
+        c += uWind * max(t, 0.0);
+        float size = seed.w * (0.6 + 0.4 * sqrt(life));
+        vec4 mvPosition = modelViewMatrix * vec4(c, 1.0);
+        mvPosition.xy += corner * size * 0.5;
+        gl_Position = projectionMatrix * mvPosition;
+        vCorner = corner;
+        // Full almost at once, so it hides the change, and thinning soon after;
+        // thinner still near the camera, so it doesn't white out the view from the water.
+        vAlpha = step(0.0, t) * smoothstep(0.0, 0.06, life) * (1.0 - smoothstep(0.35, 1.0, life)) * smoothstep(1.0, 2.4, -mvPosition.z);
+        vKey = key;
+        vLife = life;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: STEAM_FRAGMENT,
+  });
+  const puff = new THREE.Mesh(g, mat);
+  puff.name = 'Puff';
+  puff.renderOrder = 2;
+  puff.frustumCulled = false; // placed in the shader
+  puff.visible = false;
+  return puff;
+}
+
+// Steam's look, for both: a soft cel blob with a ragged edge, white with a
+// shadowed rim, a little bluer at the foot.
+const STEAM_FRAGMENT = /* glsl */ `
+  #include <fog_pars_fragment>
+  uniform vec3 uShadowTint;
+  varying vec2 vCorner;
+  varying float vAlpha, vKey, vLife;
+  ${NOISE}
+  void main() {
+    float d = length(vCorner) + (oNoise(vCorner * 2.2 + vKey) - 0.5) * 0.45;
+    float body = 1.0 - smoothstep(0.62, 0.68, d);
+    if (body * vAlpha < 0.01) discard;
+    float core = 1.0 - smoothstep(0.32, 0.38, d + vCorner.y * 0.25);
+    vec3 col = mix(mix(vec3(1.0), uShadowTint, 0.35), vec3(1.0), core);
+    col = mix(col * mix(uShadowTint, vec3(1.0), 0.7), col, smoothstep(0.0, 0.4, vLife));
+    gl_FragColor = vec4(col, body * vAlpha * (0.75 + 0.25 * core));
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }`;
 
 function mulberry(a) {
   return () => {

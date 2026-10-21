@@ -4,7 +4,7 @@ import { createDetailTerrain, createBackdrop } from './world/terrain.js';
 import { createForest, GAME_FOREST } from './world/trees.js';
 import { createLifts, createPisteMarkers, createBanner, createServiceCentre, gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
-import { createOnsen } from './world/onsen.js';
+import { createOnsen, PUFF_COVER } from './world/onsen.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
 import { Rider } from './player/rider.js';
@@ -383,8 +383,12 @@ async function chooseRider(id) {
     menu.prefs.rider = rider.modelId;
     menu.save();
   }
+  if (loaded && state === 'soak') {
+    if (goingIn) settle(); // a rider chosen while getting in is in at once
+    changeInto(SOAK_OUTFIT); // and one chosen mid-soak changes too
+  }
   riderStatus.textContent = loaded
-    ? (rider.model?.canWalk ? `Ready · ${touch.on ? 'On foot' : 'F'} switches board / on foot` : 'Ready · snowboarding')
+    ? (rider.canWalk ? `Ready · ${touch.on ? 'On foot' : 'F'} switches board / on foot` : 'Ready · snowboarding')
     : 'Could not load that rider. Previous rider kept; choose again to retry.';
 }
 for (const b of riderButtons)
@@ -761,7 +765,8 @@ function frame() {
       throttle: pedals.throttle || pedals.reverse || (car.flies && pedals.climb),
     });
   } else if (state === 'soak') {
-    poseSoak(dt);
+    if (goingIn) gettingIn(dt);
+    else poseSoak(dt);
     updateSoakCamera(dt);
     if (timing) elapsed += dt;
     hud.update(phys, elapsed);
@@ -800,7 +805,11 @@ function frame() {
   for (const v of vehicles) if (v !== car && v.phys?.spool > 0) { v.phys.coast(dt); v.model.update(dt, v.phys); }
   spray.update(dt);
   lifts.update(dt);
-  onsen.update(dt, time, state === 'soak' ? rider.root.position : null);
+  if (change && time >= change.at) {
+    rider.wear(change.outfit);
+    change = null;
+  }
+  onsen.update(dt, time, state === 'soak' && (!goingIn || goingIn.wet) ? rider.root.position : null);
   // The spout pouring into the pool, heard from 30 m off.
   const { fall } = onsen;
   sound.setWater(fall ? 1 - THREE.MathUtils.smoothstep(Math.hypot(phys.pos.x - fall.x, phys.pos.z - fall.z), 3, 30) : 0);
@@ -830,7 +839,7 @@ function touchLayout() {
     touch.layout({
       layout: walking ? 'walk' : 'board',
       big: walking ? 'board' : 'ollie',
-      aux: !walking && rider.model?.canWalk ? 'foot' : null,
+      aux: !walking && rider.canWalk ? 'foot' : null,
       act: nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
         : nearPool ? { label: 'Soak', icon: 'in', lit: true }
           : boardable ? { label: 'Ride up', icon: 'lift', lit: true } : null,
@@ -891,6 +900,7 @@ function updateBoarding() {
       if (d < bestD) { bestD = d; nearCar = v; }
     }
     nearPool = !nearCar && onsen.near(phys.pos.x, phys.pos.z);
+    if (nearPool) rider.preloadOutfit(SOAK_OUTFIT); // ready by the time you get in
   }
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = Infinity;
@@ -1166,12 +1176,31 @@ const SOAK = {
   kneeOut: 0.3,
 };
 let soakWalk = false, soakLook = 0; // walked up to it; the camera's turn round the pool, 0 right behind you
+let soakSide = 0; // the camera's swing out to the side while getting in, 0–1
+// In the water a rider wears their swimsuit, if they have one (the `swim`
+// outfit, see RIDER_MODELS): getting in, and again getting out, a puff of
+// steam goes up round them and they change inside it. If it hasn't loaded yet
+// they change when it has; if it won't, they soak as they are.
+const SOAK_OUTFIT = 'swim';
+let changing = 0, change = null; // the latest change asked for; the one waiting for its puff to thicken
+function changeInto(outfit) {
+  const asked = ++changing;
+  change = null;
+  void rider.loadOutfit(outfit).then((ready) => {
+    if (!ready || asked !== changing) return;
+    onsen.puff(rider.root.position);
+    change = { outfit, at: time + PUFF_COVER };
+  });
+}
 function soak() {
   soakWalk = rider.locomotion === 'walk';
   trail.gap(phys.pos);
   state = 'soak';
   startHop();
-  rider.setLocomotion('sit', SOAK);
+  const suit = rider.outfitModel(SOAK_OUTFIT);
+  if (onsen.way && suit && GET_IN_CLIPS.every((role) => suit.clips[role])) startGettingIn(suit);
+  else rider.setLocomotion('sit', SOAK);
+  changeInto(SOAK_OUTFIT);
   const { seat } = onsen;
   phys.reset(seat.x, seat.z, yawOf(seat.dx, seat.dz));
   soakLook = 0.35;
@@ -1181,13 +1210,20 @@ function soak() {
 function leavePool() {
   const at = onsen.exit;
   state = 'ride';
+  goingIn = null;
   phys.reset(at.x, at.z, yawOf(at.dx, at.dz));
   startHop();
   rider.setLocomotion(soakWalk ? 'walk' : 'ride');
+  changeInto(null);
   poseRider(0, true);
   camDir.set(at.dx, 0, at.dz);
   hud.prompt('');
   trail.gap(phys.pos);
+}
+// Seated, the root goes this high: shoulders just out of the water.
+function soakRootY() {
+  const b = rider.build;
+  return onsen.waterY - (b.seat + b.pivot + b.shoulder[1]) + 0.04;
 }
 function poseSoak(dt) {
   const b = rider.build, { seat } = onsen;
@@ -1195,18 +1231,136 @@ function poseSoak(dt) {
   // Hands out to the sides, just under the surface.
   SOAK.grips[0].set(b.shoulder[0] + 0.28, shoulder - 0.1, 0.12);
   SOAK.grips[1].set(-b.shoulder[0] - 0.28, shoulder - 0.1, 0.12);
-  rider.root.position.set(seat.x, onsen.waterY - shoulder + 0.04, seat.z);
+  rider.root.position.set(seat.x, soakRootY(), seat.z);
   rider.root.quaternion.setFromAxisAngle(Y_AXIS, yawOf(seat.dx, seat.dz));
   if (hop) hopping(dt);
   rider.update(dt, { crouch: 0, air: false, speed: 0, lean: Math.sin(time * 0.5) * 0.04, twist: Math.sin(time * 0.23) * 0.6 });
 }
+
+// Getting in, for a rider whose swimsuit comes with clips for it (`clips` on
+// the outfit in RIDER_MODELS): she changes in a puff of steam on the snow by
+// the gap, steps up onto the flat stone across it and down into the water
+// (`ledge`), wades over to her seat (`wade`), turns round to face the spout,
+// then stretches and sits down in the water (`sitDown`), and soaks as anyone
+// does. The clips were made in place on flat ground, so the root carries her
+// along, and lifts or lowers her by however much the real steps differ from
+// the clip's. Riders without them slide straight into their seat.
+const GET_IN_CLIPS = ['ledge', 'wade', 'sitDown'];
+const GET_IN = {
+  change: 0.7, // s standing in the puff
+  wade: 0.85, // m/s through the water
+  stride: 1.4, // m/s the walk clip is made for
+  turn: 1.1, // s turning round at the seat
+  sink: [1.2, 2.4], // s into sitDown: she sinks to her shoulders as she squats
+};
+let goingIn = null;
+function startGettingIn(suit) {
+  const { ledge, wade, sitDown } = suit.clips;
+  const { way, seat } = onsen;
+  // Where the clip's step up tops out, and how high it ends.
+  let top = 0, rTop = 0;
+  for (let t = 0; t <= ledge.duration; t += 1 / 30) {
+    const r = suit.rise(ledge, t);
+    if (r > rTop) { rTop = r; top = t; }
+  }
+  const rEnd = suit.rise(ledge, ledge.duration);
+  const wadeAt = GET_IN.change + ledge.duration;
+  goingIn = {
+    suit, ledge, wade, sitDown, top, rTop, rEnd,
+    // The root's height sat down, shoulders just out of the water as when
+    // soaking (the clip sits lower than the seated pose does).
+    sunk: onsen.waterY + 0.04 - suit.heightIn(sitDown, sitDown.duration, 'LeftArm'),
+    t: 0,
+    walked: 0, // the wade clip's time so far
+    wadeAt, // s, from the foot of the stone over to the seat
+    wadeEnd: wadeAt + Math.hypot(seat.x - way.water.x, seat.z - way.water.z) / GET_IN.wade,
+    // The root's height wading (from where the ledge clip leaves it), and the
+    // pool floor it eases onto, as the walk clip fades in.
+    y: way.water.y - rEnd,
+    floor: way.water.y,
+    dx: way.dx, dz: way.dz, // the way she's facing
+    wet: false, // she's in the water
+  };
+  rider.play(ledge, 0);
+}
+function gettingIn(dt) {
+  const g = goingIn, { way, seat } = onsen, MU = THREE.MathUtils;
+  g.t += dt;
+  const at = rider.root.position;
+  let t = g.t - GET_IN.change;
+  if (t < 0) {
+    // Changing on the snow, the ledge clip's first frame.
+    at.copy(way.shore);
+    rider.play(g.ledge, 0);
+  } else if (t < g.ledge.duration) {
+    // Up onto the stone, as far as the clip's foot goes forward (and as high
+    // as the stone really is), then down off its far side onto the pool floor.
+    const r = g.suit.rise(g.ledge, t);
+    if (t <= g.top) {
+      const k = MU.clamp(r / g.rTop, 0, 1);
+      at.lerpVectors(way.shore, way.stone, k);
+      at.y = way.shore.y + k * (way.stone.y - way.shore.y - g.rTop);
+    } else {
+      const k = MU.clamp((g.rTop - r) / (g.rTop - g.rEnd), 0, 1);
+      at.lerpVectors(way.stone, way.water, MU.smoothstep(k, 0, 0.45)); // off the stone before the first step down
+      at.y = MU.lerp(way.stone.y - g.rTop, way.water.y - g.rEnd, k);
+      g.wet ||= k > 0.3;
+    }
+    rider.play(g.ledge, t);
+  } else if (g.t < g.wadeEnd + GET_IN.turn) {
+    // Wading over to the seat, turning toward it as she goes; then round to
+    // face the spout, feet shuffling.
+    const s = MU.smootherstep(g.t, g.wadeAt, g.wadeEnd);
+    const x = MU.lerp(way.water.x, seat.x, s), z = MU.lerp(way.water.z, seat.z, s);
+    const step = Math.hypot(x - at.x, z - at.z);
+    const turning = g.t > g.wadeEnd;
+    g.walked += turning ? dt * 0.35 : step / GET_IN.stride;
+    const floor = onsen.floorAt(x, z);
+    if (floor !== null && floor < onsen.waterY - 0.1) g.floor = floor; // not up onto a rock showing through
+    g.y += (g.floor - g.y) * (1 - Math.exp(-dt * 8));
+    at.set(x, g.y, z);
+    const yaw = Math.atan2(g.dx, g.dz);
+    const goal = turning ? Math.atan2(seat.dx, seat.dz) : Math.atan2(seat.x - way.water.x, seat.z - way.water.z);
+    const turned = MU.euclideanModulo(goal - yaw + Math.PI, Math.PI * 2) - Math.PI;
+    const a = yaw + turned * (1 - Math.exp(-dt * (turning ? 5 : 3)));
+    g.dx = Math.sin(a);
+    g.dz = Math.cos(a);
+    rider.play(g.wade, g.walked % g.wade.duration);
+  } else {
+    // Sitting down where she stands, sinking to her shoulders as she goes.
+    t = g.t - g.wadeEnd - GET_IN.turn;
+    g.dx = seat.dx;
+    g.dz = seat.dz;
+    at.set(seat.x, MU.lerp(g.y, g.sunk, MU.smoothstep(t, ...GET_IN.sink)), seat.z);
+    if (t >= g.sitDown.duration) return settle();
+    rider.play(g.sitDown, t);
+  }
+  rider.root.quaternion.setFromAxisAngle(Y_AXIS, yawOf(g.dx, g.dz));
+  if (hop) hopping(dt);
+  rider.update(dt, { crouch: 0, air: false, speed: 0, lean: 0, twist: 0 });
+}
+// Seated, from here on as any rider soaks, the root sliding from the clip's
+// height to the seated pose's.
+function settle() {
+  goingIn = null;
+  startHop();
+  rider.setLocomotion('sit', SOAK);
+  poseSoak(0);
+}
+
 function updateSoakCamera(dt) {
   const { seat } = onsen, p = portrait();
   soakLook += input.steer * dt * 1.1;
-  _v.set(-seat.dx, 0, -seat.dz).applyAxisAngle(Y_AXIS, soakLook);
+  // Getting in, after her as she goes, from off to her side (to see her steps)
+  // and further back; swinging round behind her seat once she's sat down.
+  const g = goingIn, at = g ? rider.root.position : seat;
+  const dx = g ? g.dx : seat.dx, dz = g ? g.dz : seat.dz;
+  const y = g ? Math.max(onsen.waterY, at.y + 0.4) : onsen.waterY;
+  soakSide += ((g ? 1 : 0) - soakSide) * (1 - Math.exp(-dt * 1.5));
+  _v.set(-dx, 0, -dz).applyAxisAngle(Y_AXIS, soakLook + soakSide * 1.1);
   // Close behind and above, clear of the rocks at your back.
-  _w.set(seat.x, onsen.waterY + 1.9 + p, seat.z).addScaledVector(_v, 2.3 + p * 1.5);
-  _look.set(seat.x + seat.dx * 1.4, onsen.waterY + 0.45, seat.z + seat.dz * 1.4);
+  _w.set(at.x, y + 1.9 + p, at.z).addScaledVector(_v, 2.3 + p * 1.5 + soakSide * 0.7);
+  _look.set(at.x + dx * 1.4, y + 0.45 + soakSide * 0.25, at.z + dz * 1.4);
   camera.position.lerp(_w, 1 - Math.exp(-dt * 3));
   camLook.lerp(_look, 1 - Math.exp(-dt * 4));
   camera.lookAt(camLook);

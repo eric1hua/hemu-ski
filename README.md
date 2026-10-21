@@ -97,7 +97,13 @@ to its rocks and press **E** to get in: you slide down into the water and sit
 back against the rocks across from the spout, shoulders just out of it. A and D
 turn the camera round the pool, and E gets you out at the gap in the rocks, on
 foot if you walked up. On a touch screen the button says **Soak**, then **Get
-out**, and the stick turns the camera.
+out**, and the stick turns the camera. The female rider walks in instead: she
+changes into her swimsuit in a puff of steam on the snow by the gap, steps up
+onto the flat stone across it and down into the water, wades over to her
+seat, turns round, stretches and sits down, the camera following from her
+side; about 15 s, and E gets her out at any point. Getting out, she changes
+back into her ski gear. The male and classic riders have no swimsuit yet, so
+they slide in as they are.
 
 A menu rail on the left edge links to the diorama, takes you back to the start
 (R), picks your rider (**Rider**:
@@ -287,6 +293,31 @@ edits were saved.
   shader, and thin out close to the camera so they never white out the view.
   Soaking reuses the snowmobile's seated pose: hips on the pool floor, legs out
   along it, hands just under the surface.
+- A rider can have other sets of clothes (`outfits` in `RIDER_MODELS`,
+  `src/player/rider-model.js`); the hot spring uses `swim`. Tripo can't take
+  clothes off a model, so each outfit is a whole second model on the same
+  Mixamo skeleton, posed by the same rig. Changing only swaps which model is
+  shown. An outfit is sized by its skeleton, not its height: its trunk (Hips
+  joint to Head joint) is matched to the rider's own, because the female
+  rider's 1.8 m includes her cat-ear beanie and boots. It loads when you come
+  near the pool. Getting in or out, a puff of steam goes up round the rider,
+  following them for half a second as they slide. They change 0.15 s in, once
+  it's thick.
+- The female rider's swimsuit comes with three Tripo clips for getting in,
+  named by role in `RIDER_MODELS` (`clips`): `ledge` (step up and down again),
+  `wade` (a walk) and `sitDown` (stretch, squat, sit with legs out). The rider
+  plays them in an `act` mode, at a time main.js sets each frame rather than
+  one the mixer runs on, so the change of clothes in the puff carries on from
+  the same frame; any model on the Mixamo skeleton can play any of them. The
+  clips were made in place on flat ground, so main.js moves the root along the
+  way in, measured off the ring (`onsen.way`): from the snow, onto the flat
+  stone (0.7 m up) and down onto the pool floor. It lifts or lowers the root by
+  however much the real steps differ from the clip's, in step with how far the
+  clip has raised her hips, and leaves the stone before the clip's first step
+  down. Wading follows the pool floor under her (`onsen.floorAt`). She sits
+  where she stands, sinking until her shoulders are just out of the water,
+  then fades into the seated soaking pose. There's no clip for undressing; the
+  puff of steam covers the change.
 
 ## What's approximate
 
