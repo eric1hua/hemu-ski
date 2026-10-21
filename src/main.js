@@ -297,11 +297,11 @@ document.getElementById('mi-restart').addEventListener('click', () => {
 
 // Touch controls (touch.js): the stick and the held buttons are read with the
 // keys, below; a tapped button presses E (the one by your thumb: board, get in
-// or out, skip the ride) or F (on foot, or back on the board). What they show
-// follows what you're doing (see touchLayout).
-let touchAct = 'KeyE'; // what the button by your thumb presses (see touchLayout)
+// or out, pet the dog, skip the ride), Q (throw a snowball) or F (on foot, or
+// back on the board). What they show follows what you're doing (see touchLayout).
+const TAPS = { act: 'KeyE', alt: 'KeyQ' };
 const touch = new TouchPad({
-  onTap: (name) => act(name === 'act' ? touchAct : 'KeyF'),
+  onTap: (name) => act(TAPS[name] ?? 'KeyF'),
   onPress: () => sound.start(),
   onMode: (on) => hud.setTouch(on),
 });
@@ -839,7 +839,8 @@ function frame() {
 // What the touch controls show (touch.js): on the board the stick and Ollie,
 // with On foot beside it for a rider who can walk; on foot Board in Ollie's
 // place; in a vehicle its handbrake (flying, Up and Down) and the way out; on a
-// lift only Skip. The button above them does what E would where you are.
+// lift only Skip. The button above them does what E would where you are, and
+// while the dog's about Throw, beside it, does what Q would.
 function touchLayout() {
   const shown = touch.on && !bigMap.isOpen && !leaving && (state === 'ride' || state === 'drive' || state === 'lift' || state === 'soak');
   touch.show(shown);
@@ -849,17 +850,15 @@ function touchLayout() {
     const act = nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
       : nearPool ? { label: 'Soak', icon: 'in', lit: true }
         : nearDog ? { label: 'Pet', icon: 'paw', lit: true }
-          : boardable ? { label: 'Ride up', icon: 'lift', lit: true }
-            : dogAround ? { label: 'Throw', icon: 'ball', key: 'KeyQ' } : null;
-    touchAct = act?.key ?? 'KeyE';
+          : boardable ? { label: 'Ride up', icon: 'lift', lit: true } : null;
     touch.layout({
       layout: walking ? 'walk' : 'board',
       big: walking ? 'board' : 'ollie',
+      alt: dogAround ? 'throw' : null,
       aux: !walking && rider.canWalk ? 'foot' : null,
       act,
     });
   } else if (state === 'drive') {
-    touchAct = 'KeyE';
     touch.layout({
       layout: car.flies ? 'fly' : 'drive',
       big: car.flies ? 'up' : 'handbrake',
@@ -918,7 +917,7 @@ function updateBoarding() {
     nearPool = !nearCar && onsen.near(phys.pos.x, phys.pos.z);
     if (nearPool) rider.preloadOutfit(SOAK_OUTFIT); // ready by the time you get in
     nearDog = !nearCar && !nearPool && phys.speed < 3 && dog.canPet(phys.pos);
-    dogAround = !nearDog && phys.speed < 3 && dog.canFetch(phys.pos) && phys.pos.distanceTo(dog.pos) < 15;
+    dogAround = phys.speed < 3 && dog.canFetch(phys.pos) && phys.pos.distanceTo(dog.pos) < 15; // near enough to throw for, even right by it
   }
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = Infinity;

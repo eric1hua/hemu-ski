@@ -398,7 +398,8 @@ body {
   box-shadow: 3px 3px 0 rgba(35, 48, 58, 0.35);
 }
 /* The buttons hang off the bottom-right corner: the big one (Ollie, Handbrake,
-   Up, Board) in it, the action (E) above, On foot to its left. */
+   Up, Board) in it, the action (E) above, On foot to its left, and Throw (Q)
+   between those two. */
 #touch .pad {
   position: absolute; right: calc(18px + env(safe-area-inset-right)); bottom: calc(52px + env(safe-area-inset-bottom));
   width: 0; height: 0;
@@ -422,6 +423,7 @@ body {
 #touch .pad button.dim { opacity: 0.55; border-style: dashed; box-shadow: none; }
 #touch .pad .act { right: 10px; bottom: 104px; }
 #touch .pad .aux { right: 100px; bottom: 4px; width: 60px; height: 60px; font-size: 13px; }
+#touch .pad .alt { right: 86px; bottom: 86px; width: 60px; height: 60px; font-size: 13px; }
 #touch .pad .low { width: 80px; height: 80px; font-size: 15px; }
 /* On foot, Board takes Ollie's place, in paper; in a vehicle the handbrake's
    label is long; flying, Up stands over Down with the way out beside them; on

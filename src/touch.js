@@ -1,5 +1,5 @@
 // Touch controls for phones and tablets: a floating stick low on the left and
-// up to four round buttons by the right thumb. The stick centres wherever the
+// up to five round buttons by the right thumb. The stick centres wherever the
 // thumb lands; read() turns it into what the keys give the game (steer -1 to 1,
 // A positive, and up / down past a third of the way, like W and S), and the
 // held buttons stand in for Space and Shift. Tapped buttons call onTap(name).
@@ -39,10 +39,11 @@ const KINDS = {
   down: { label: 'Down', icon: 'down', hold: true },
   board: { label: 'Board', icon: 'board' },
   foot: { label: 'On foot', icon: 'foot' },
+  throw: { label: 'Throw', icon: 'ball' },
 };
 
 export class TouchPad {
-  // `onTap(name)`: a tapped button ('act', 'aux' or 'big' when it isn't held);
+  // `onTap(name)`: a tapped button ('act', 'alt', 'aux' or 'big' when it isn't held);
   // `onMode(on)`: touch mode switched; `onPress()`: any touch on the controls
   // (to start the sound, which needs a gesture).
   constructor({ onTap, onMode, onPress }) {
@@ -59,7 +60,7 @@ export class TouchPad {
     this.visible = false;
     this.on = false;
 
-    for (const name of ['big', 'low', 'act', 'aux']) {
+    for (const name of ['big', 'low', 'act', 'alt', 'aux']) {
       const b = this.el.querySelector(`.${name}`);
       this.buttons[name] = b;
       b.addEventListener('pointerdown', (e) => {
@@ -124,9 +125,9 @@ export class TouchPad {
   }
 
   // What shows: `layout` names the arrangement for the CSS ('board', 'walk',
-  // 'drive', 'fly' or 'lift'); `big`, `low` and `aux` a kind from KINDS, or
-  // null; `act` { label, icon, lit, dim }, or null.
-  layout({ layout, stick = true, big = null, low = null, aux = null, act = null }) {
+  // 'drive', 'fly' or 'lift'); `big`, `low`, `alt` and `aux` a kind from
+  // KINDS, or null; `act` { label, icon, lit, dim }, or null.
+  layout({ layout, stick = true, big = null, low = null, alt = null, aux = null, act = null }) {
     if (this.shown.layout !== layout) {
       this.shown.layout = layout;
       this.el.dataset.layout = layout;
@@ -139,6 +140,7 @@ export class TouchPad {
     }
     this.#set('big', big && KINDS[big]);
     this.#set('low', low && KINDS[low]);
+    this.#set('alt', alt && KINDS[alt]);
     this.#set('aux', aux && KINDS[aux]);
     this.#set('act', act);
   }
