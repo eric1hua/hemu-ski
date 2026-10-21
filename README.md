@@ -89,6 +89,16 @@ full speed. The sticks move with
 the controls: the right one with W, S, A and D, the left one forward to climb
 and back to come down, and the pilot's hands go with them.
 
+Hidden in the trees about 145 m behind the East Service Centre is a hot spring,
+after the snowy mountain springs of Zao in Japan: a ring of snow-capped boulders
+full of milky jade water, with steam rising off it and a wooden spout pouring
+into it out of a snowy cave rock. You can hear it from 30 m off. Walk or ride up
+to its rocks and press **E** to get in: you slide down into the water and sit
+back against the rocks across from the spout, shoulders just out of it. A and D
+turn the camera round the pool, and E gets you out at the gap in the rocks, on
+foot if you walked up. On a touch screen the button says **Soak**, then **Get
+out**, and the stick turns the camera.
+
 A menu rail on the left edge links to the diorama, takes you back to the start
 (R), picks your rider (**Rider**:
 male, female or the classic one; the female rider can also walk and run off the
@@ -201,7 +211,8 @@ edits were saved.
 | W (↑) | tuck; push along on the flat |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
-| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup or the Jetson ONE, or on or off the snowmobile, beside it |
+| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup or the Jetson ONE, or on or off the snowmobile, beside it; get in or out of the hot spring |
+| In the hot spring | A / D look around, E get out |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
 | In the pickup or on the snowmobile | W drive, S brake / reverse, A / D steer, Space handbrake, R back to the hall |
 | In the Jetson ONE | Space take off / climb, Shift come down / land, W / S fly forward / back, A / D turn, E get out once it's down (or hovering just above the snow), R back to the hall |
@@ -260,6 +271,22 @@ edits were saved.
   the pose blends from standing to sitting. In the Jetson the same pose puts the
   hips on its cushion, the legs down the footwell under the nose and the hands on
   the sticks' handles, which follow the sticks as they lean.
+
+- `src/world/onsen.js` builds the hot spring from two Tripo models
+  (`public/models/onsen/`): the ring of boulders and the cave rock. It draws the
+  water, the stream and the steam in code. The water is a disc out to where the
+  rocks stand above its surface, found from the ring's own shape at load. It
+  has the toon material's flat tones and shadows, and pale streaks that drift
+  away from where the stream lands, crossfaded between two phases so they never
+  stretch out. Rings spread from the landing and round a soaking rider, and
+  foam rims the shore. It's opaque, as Zao's milky sulphur water is, so the ink
+  pass outlines its shore against the rocks. The stream is a tube along the
+  trough and off its lip, falling as a thrown thing does, with white streaks
+  racing down it. The steam is camera-facing quads with no normals, so the ink
+  pass leaves them out. They rise, drift on the wind and fade in the vertex
+  shader, and thin out close to the camera so they never white out the view.
+  Soaking reuses the snowmobile's seated pose: hips on the pool floor, legs out
+  along it, hands just under the surface.
 
 ## What's approximate
 

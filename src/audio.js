@@ -1,5 +1,6 @@
-// Procedural sound: wind that rises with speed, a scrape for edge/skid, and the
-// engine of the pickup or the snowmobile, or the Jetson ONE's rotors.
+// Procedural sound: wind that rises with speed, a scrape for edge/skid, the
+// engine of the pickup or the snowmobile, or the Jetson ONE's rotors, and the
+// hot spring's spout pouring into its pool.
 // Effects and music play through their own buses, switched from the menu.
 export class Sound {
   constructor() {
@@ -40,6 +41,14 @@ export class Sound {
     this.scrapeG.gain.value = 0;
     noise().connect(this.scrapeF).connect(this.scrapeG).connect(this.sfx);
 
+    // The spout: noise through a band-pass that jumps about, so it burbles.
+    this.waterF = ctx.createBiquadFilter();
+    this.waterF.type = 'bandpass';
+    this.waterF.Q.value = 2.5;
+    this.waterG = ctx.createGain();
+    this.waterG.gain.value = 0;
+    noise().connect(this.waterF).connect(this.waterG).connect(this.sfx);
+
     // Engine: a sawtooth and a square an octave down, through a low-pass that
     // opens on the throttle.
     this.engF = ctx.createBiquadFilter();
@@ -61,6 +70,13 @@ export class Sound {
   setSfx(on) {
     this.sfxOn = on;
     if (this.ctx) this.sfx.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.05);
+  }
+  // How loud the hot spring's spout is, 0…1, by how near you are to it.
+  setWater(level) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.waterG.gain.setTargetAtTime(level * 0.08, t, 0.3);
+    if (level > 0) this.waterF.frequency.setTargetAtTime(700 + Math.random() * 1600, t, 0.025);
   }
   setMusic(on) {
     this.musicOn = on;

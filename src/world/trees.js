@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeToon } from '../render/toon.js';
 import { vnoise } from './terrain.js';
-import { PISTE_HALF_WIDTH, SERVICE_CENTRES } from './data.js';
+import { PISTE_HALF_WIDTH, SERVICE_CENTRES, ONSEN } from './data.js';
 
 const GREEN = new THREE.Color('#4d7560');
 const GREEN_DARK = new THREE.Color('#3d6352');
@@ -72,7 +72,7 @@ export const GAME_FOREST = {
   treeline: 2350,
   spacing: 10,
   density: 0.5,
-  clearings: SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 110 })),
+  clearings: [...SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 110 })), { x: ONSEN.x, z: ONSEN.z, r: ONSEN.clearing }],
 };
 
 // Every spot the forest would put a tree: one jittered candidate per `spacing`

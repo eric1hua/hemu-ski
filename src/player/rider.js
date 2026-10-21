@@ -204,6 +204,11 @@ export class Rider {
     return true;
   }
 
+  // The build for sitting (see CLASSIC_BUILD): the rigged rider's, or the classic one's.
+  get build() {
+    return this.model?.build ?? CLASSIC_BUILD;
+  }
+
   // 'ride' on the board, 'walk' on foot (riders with walk and run clips), or
   // 'sit' on a vehicle's `seat`: { hips, feet: [left, right], grips: [left,
   // right], kneeOut }, the cushion under the hips, the soles' spots and the
@@ -437,7 +442,7 @@ export class Rider {
   // and a little toward the steering with `twist`; the head stays level.
   #sit(p) {
     const seat = this.seat;
-    const build = this.model?.build ?? CLASSIC_BUILD;
+    const { build } = this;
     this.hips.position.copy(seat.hips);
     this.hips.position.y += build.seat;
     this.hips.rotation.set(0, 0, 0);

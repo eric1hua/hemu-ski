@@ -189,3 +189,8 @@ export const SERVICE_CENTRES = [
   { id: 'east', zh: '东区服务大厅', en: 'East Service Centre', ele: 1439, x: 710, z: 4410, faceTo: [610, 4280], roof: '#5f8064', lift: '1号索道' },
   { id: 'west', zh: '西区服务大厅', en: 'West Service Centre', ele: 1383, x: -1240, z: 4640, faceTo: [-1183, 4512], roof: '#4a5661', lift: '3号索道' },
 ];
+
+// The hot spring (see world/onsen.js), hidden in the trees about 145 m behind
+// the East Service Centre on nearly level ground, the gap in its rocks facing
+// the hall. `clearing` keeps trees off it.
+export const ONSEN = { zh: '温泉', en: 'Hot spring', x: 638, z: 4536, faceTo: [710, 4410], clearing: 10 };

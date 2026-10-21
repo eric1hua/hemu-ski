@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { loadWorld, PisteField, SERVICE_CENTRES, PISTE_HALF_WIDTH } from './world/data.js';
+import { loadWorld, PisteField, SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
 import { createDetailTerrain, createBackdrop } from './world/terrain.js';
 import { createForest, GAME_FOREST } from './world/trees.js';
 import { createLifts, createPisteMarkers, createBanner, createServiceCentre, gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
+import { createOnsen } from './world/onsen.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
 import { Rider } from './player/rider.js';
@@ -87,6 +88,9 @@ const forest = createForest(detail, piste, meta.lifts, { ...GAME_FOREST, edits: 
 scene.add(forest.group);
 const lifts = createLifts(detail, meta.lifts);
 scene.add(lifts.group);
+// The hot spring hidden in the trees behind the East Service Centre (see Soaking).
+const onsen = createOnsen(detail, ONSEN);
+scene.add(onsen.group);
 scene.add(createPisteMarkers(detail, meta.runs));
 const sky = createSky();
 scene.add(sky);
@@ -142,7 +146,7 @@ scene.add(cabin);
 // ?rider=female/male/classic.
 const rider = new Rider({ model: false });
 scene.add(rider.root);
-const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)] });
+const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints] });
 const trail = new Trail();
 const spray = new Spray();
 scene.add(trail.mesh, spray.points);
@@ -215,7 +219,7 @@ for (const v of vehicles) {
   v.model.ready.then(() => {
     v.phys = new (v.flies ? FlightPhysics : VehiclePhysics)({
       hf: detail, piste, forest, dims: v.model.dims, handling: v.handling,
-      obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)],
+      obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints],
     });
     v.phys.reset(v.park.x, v.park.z, yawOf(v.park.dx, v.park.dz));
     v.model.update(0, v.phys);
@@ -264,7 +268,9 @@ function act(code, repeat = false) {
     if (car.phys.canExit === false) hud.toast(touch.on ? 'Land first · hold Down' : 'Land first · hold Shift', 1600);
     else getOut();
   }
+  else if (code === 'KeyE' && !repeat && state === 'soak') leavePool();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearCar) getIn(nearCar);
+  else if (code === 'KeyE' && !repeat && state === 'ride' && nearPool) soak();
   else if (code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
   if ((code === 'Enter' || code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
@@ -407,7 +413,7 @@ panelNextBtn.addEventListener('click', () => {
 });
 
 // ---------- Game state ----------
-let state = 'title'; // title → swoop → intro → ride ⇄ lift / drive, or arrive → ride from the diorama
+let state = 'title'; // title → swoop → intro → ride ⇄ lift / drive / soak, or arrive → ride from the diorama
 let elapsed = 0, timing = false, falls = 0;
 let camDir = new THREE.Vector3(startAt.dx, 0, startAt.dz);
 
@@ -754,6 +760,12 @@ function frame() {
       kind: car.name, speed: Math.abs(drive.vel.dot(drive.forward(_f))), spool: drive.spool, load: drive.load,
       throttle: pedals.throttle || pedals.reverse || (car.flies && pedals.climb),
     });
+  } else if (state === 'soak') {
+    poseSoak(dt);
+    updateSoakCamera(dt);
+    if (timing) elapsed += dt;
+    hud.update(phys, elapsed);
+    sound.update(0, 0, false);
   } else if (state === 'lift') {
     const label = `${liftRide.ride.label} ↑`;
     updateLift(dt); // may step you off at the top
@@ -768,7 +780,7 @@ function frame() {
     else if (state === 'arrive') updateArrival(dt);
     sound.update(0, 0, false);
   }
-  const onMountain = state === 'ride' || state === 'lift' || state === 'drive';
+  const onMountain = state === 'ride' || state === 'lift' || state === 'drive' || state === 'soak';
   if (onMountain && !bigMap.isOpen) {
     const ev = gps.update(dt, gpsFrom());
     if (ev?.type === 'arrived') hud.toast(`Arrived · ${ev.name}`, 2600);
@@ -788,6 +800,10 @@ function frame() {
   for (const v of vehicles) if (v !== car && v.phys?.spool > 0) { v.phys.coast(dt); v.model.update(dt, v.phys); }
   spray.update(dt);
   lifts.update(dt);
+  onsen.update(dt, time, state === 'soak' ? rider.root.position : null);
+  // The spout pouring into the pool, heard from 30 m off.
+  const { fall } = onsen;
+  sound.setWater(fall ? 1 - THREE.MathUtils.smoothstep(Math.hypot(phys.pos.x - fall.x, phys.pos.z - fall.z), 3, 30) : 0);
   forest.update(camera.position);
   terrain.update(camera.position);
   if (debug.cam) debug.cam(camera, phys);
@@ -806,7 +822,7 @@ function frame() {
 // place; in a vehicle its handbrake (flying, Up and Down) and the way out; on a
 // lift only Skip. The button above them does what E would where you are.
 function touchLayout() {
-  const shown = touch.on && !bigMap.isOpen && !leaving && (state === 'ride' || state === 'drive' || state === 'lift');
+  const shown = touch.on && !bigMap.isOpen && !leaving && (state === 'ride' || state === 'drive' || state === 'lift' || state === 'soak');
   touch.show(shown);
   if (!shown) return;
   if (state === 'ride') {
@@ -816,7 +832,8 @@ function touchLayout() {
       big: walking ? 'board' : 'ollie',
       aux: !walking && rider.model?.canWalk ? 'foot' : null,
       act: nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
-        : boardable ? { label: 'Ride up', icon: 'lift', lit: true } : null,
+        : nearPool ? { label: 'Soak', icon: 'in', lit: true }
+          : boardable ? { label: 'Ride up', icon: 'lift', lit: true } : null,
     });
   } else if (state === 'drive') {
     touch.layout({
@@ -825,6 +842,8 @@ function touchLayout() {
       low: car.flies ? 'down' : null,
       act: { label: car.touch.exit, icon: 'out', dim: car.phys.canExit === false },
     });
+  } else if (state === 'soak') {
+    touch.layout({ layout: 'lift', act: { label: 'Get out', icon: 'out' } });
   } else {
     touch.layout({ layout: 'lift', stick: false, act: liftRide.t > 0.5 ? { label: 'Skip', icon: 'skip' } : null });
   }
@@ -860,16 +879,18 @@ function respawnInPlace() {
 }
 
 // ---------- Lifts ----------
-let boardable = null, atHall = null, nearCar = null;
+let boardable = null, atHall = null, nearCar = null, nearPool = false;
 function updateBoarding() {
   boardable = null;
   nearCar = null;
+  nearPool = false;
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = 2.5;
     for (const v of vehicles) {
       const d = v.phys ? boxGap(v.model.footprint, phys.pos.x, phys.pos.z) : Infinity;
       if (d < bestD) { bestD = d; nearCar = v; }
     }
+    nearPool = !nearCar && onsen.near(phys.pos.x, phys.pos.z);
   }
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = Infinity;
@@ -882,6 +903,7 @@ function updateBoarding() {
   if (hall && hall !== atHall) hud.toast(hall.zh, 2200);
   atHall = hall;
   if (nearCar) hud.prompt(nearCar.prompt, nearCar.touch.prompt, pressE);
+  else if (nearPool) hud.prompt('<kbd>E</kbd> soak in the <b>hot spring</b>', 'Soak in the <b>hot spring</b> ▸', pressE);
   else if (boardable) {
     const where = hall ? `${hall.en} · ` : '';
     const up = `<b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`;
@@ -1130,6 +1152,68 @@ function boxGap(o, x, z) {
   return Math.hypot(Math.max(0, Math.abs(dx * c - dz * s) - o.hw), Math.max(0, Math.abs(dx * s + dz * c) - o.hd));
 }
 
+// ---------- Soaking ----------
+// E beside the hot spring's rocks gets you in: you slide down into the water
+// and sit back against the rocks across from the spout, shoulders just out of
+// it, arms resting on the surface, swaying a little. A and D (or the stick) turn
+// the camera round the pool; E gets you out at the gap in the rocks, on foot if
+// you walked up. Seated, the rider takes `SOAK` as its seat (see
+// Rider.setLocomotion): hips on the pool floor, legs out along it.
+const SOAK = {
+  hips: new THREE.Vector3(),
+  feet: [new THREE.Vector3(0.17, 0, 0.6), new THREE.Vector3(-0.17, 0, 0.6)],
+  grips: [new THREE.Vector3(), new THREE.Vector3()],
+  kneeOut: 0.3,
+};
+let soakWalk = false, soakLook = 0; // walked up to it; the camera's turn round the pool, 0 right behind you
+function soak() {
+  soakWalk = rider.locomotion === 'walk';
+  trail.gap(phys.pos);
+  state = 'soak';
+  startHop();
+  rider.setLocomotion('sit', SOAK);
+  const { seat } = onsen;
+  phys.reset(seat.x, seat.z, yawOf(seat.dx, seat.dz));
+  soakLook = 0.35;
+  hud.prompt('<kbd>A</kbd><kbd>D</kbd> look around · <kbd>E</kbd> get out', 'The stick looks around');
+  hud.toast(`${ONSEN.zh} · ${ONSEN.en}`, 2000);
+}
+function leavePool() {
+  const at = onsen.exit;
+  state = 'ride';
+  phys.reset(at.x, at.z, yawOf(at.dx, at.dz));
+  startHop();
+  rider.setLocomotion(soakWalk ? 'walk' : 'ride');
+  poseRider(0, true);
+  camDir.set(at.dx, 0, at.dz);
+  hud.prompt('');
+  trail.gap(phys.pos);
+}
+function poseSoak(dt) {
+  const b = rider.build, { seat } = onsen;
+  const shoulder = b.seat + b.pivot + b.shoulder[1]; // above the pool floor
+  // Hands out to the sides, just under the surface.
+  SOAK.grips[0].set(b.shoulder[0] + 0.28, shoulder - 0.1, 0.12);
+  SOAK.grips[1].set(-b.shoulder[0] - 0.28, shoulder - 0.1, 0.12);
+  rider.root.position.set(seat.x, onsen.waterY - shoulder + 0.04, seat.z);
+  rider.root.quaternion.setFromAxisAngle(Y_AXIS, yawOf(seat.dx, seat.dz));
+  if (hop) hopping(dt);
+  rider.update(dt, { crouch: 0, air: false, speed: 0, lean: Math.sin(time * 0.5) * 0.04, twist: Math.sin(time * 0.23) * 0.6 });
+}
+function updateSoakCamera(dt) {
+  const { seat } = onsen, p = portrait();
+  soakLook += input.steer * dt * 1.1;
+  _v.set(-seat.dx, 0, -seat.dz).applyAxisAngle(Y_AXIS, soakLook);
+  // Close behind and above, clear of the rocks at your back.
+  _w.set(seat.x, onsen.waterY + 1.9 + p, seat.z).addScaledVector(_v, 2.3 + p * 1.5);
+  _look.set(seat.x + seat.dx * 1.4, onsen.waterY + 0.45, seat.z + seat.dz * 1.4);
+  camera.position.lerp(_w, 1 - Math.exp(-dt * 3));
+  camLook.lerp(_look, 1 - Math.exp(-dt * 4));
+  camera.lookAt(camLook);
+  camera.fov = 55 + p * 15;
+  camera.updateProjectionMatrix();
+}
+
 // ---------- Destinations ----------
 // The diorama sends you here with ?at=<key> (see destinations.js): to the top
 // of a run, beside a lift station, or outside a service centre. It becomes your
@@ -1254,7 +1338,7 @@ const minimapBtn = document.getElementById('minimap-open');
 minimapBtn.addEventListener('mousedown', (e) => e.preventDefault()); // keep Space for the ollie
 minimapBtn.addEventListener('click', () => openMap());
 function openMap() {
-  if (bigMap.isOpen || leaving || (state !== 'ride' && state !== 'lift' && state !== 'drive')) return;
+  if (bigMap.isOpen || leaving || (state !== 'ride' && state !== 'lift' && state !== 'drive' && state !== 'soak')) return;
   const at = whereabouts();
   bigMap.open(at, hud.place, phys.pos.y);
   minimapBtn.setAttribute('aria-expanded', 'true');
@@ -1316,7 +1400,7 @@ window.addEventListener('pageshow', (e) => {
 const RESUME_KEY = 'hemu-ski.resume';
 function keepResume() {
   try {
-    if (state === 'ride' || state === 'lift' || state === 'drive') sessionStorage.setItem(RESUME_KEY, JSON.stringify(whereabouts()));
+    if (state === 'ride' || state === 'lift' || state === 'drive' || state === 'soak') sessionStorage.setItem(RESUME_KEY, JSON.stringify(whereabouts()));
     else sessionStorage.removeItem(RESUME_KEY); // from the title, Back is the title again
   } catch {}
 }
@@ -1345,5 +1429,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, onsen, soak, leavePool, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);
