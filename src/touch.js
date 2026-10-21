@@ -27,6 +27,8 @@ const ICONS = {
   in: '<path d="M14 4h5v16h-5"/><path d="M10 8l4 4-4 4M14 12H5"/>',
   out: '<path d="M10 4H5v16h5"/><path d="M14 8l4 4-4 4M18 12H9"/>',
   skip: '<path d="M5 6l7 6-7 6zM12 6l7 6-7 6z"/>',
+  paw: '<ellipse cx="12" cy="15.5" rx="4.5" ry="3.8"/><circle cx="6" cy="10" r="1.8"/><circle cx="9.8" cy="6.4" r="1.8"/><circle cx="14.2" cy="6.4" r="1.8"/><circle cx="18" cy="10" r="1.8"/>',
+  ball: '<circle cx="15" cy="9" r="5" fill="#fff"/><path d="M3 20c3-1 5-3 7-6"/>',
 };
 // What each button can be: its label and icon, and whether it's held (read as
 // a key) or tapped.

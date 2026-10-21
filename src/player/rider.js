@@ -6,6 +6,7 @@
 // Built from primitives so it matches the flat cel-shaded world.
 import * as THREE from 'three';
 import { makeToon } from '../render/toon.js';
+import { THROW, ON_BOARD, sample, throwWeight } from './throw.js';
 
 const P = {
   cream: '#efe9dc',
@@ -76,6 +77,7 @@ function backpackTexture() {
 
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
+const _t = new THREE.Vector3();
 // The primitive character's build, for sitting on a seat: how high its hips sit
 // above the cushion, where its torso pivots above the hips, its shoulders
 // (out, up) from that pivot, and how far its arms reach (shoulder to mitt).
@@ -165,6 +167,12 @@ export class Rider {
     this.#buildCharacter();
     this.stance = this.feet.map((f) => f.position.clone()); // the feet on the board
     this.seat = null; // on a vehicle: see setLocomotion
+    // A world point the right hand reaches out to (petting the dog), or null,
+    // and how far into reaching it is (0–1), easing in and out.
+    this.reach = null;
+    this.reachW = 0;
+    this.reachAt = new THREE.Vector3();
+    this.throwT = null; // s into throwing something overarm (see throw.js), or null
 
     this.pose = { crouch: 0.4, lean: 0, twist: 0, armSwing: 0, air: 0, tumble: 0 };
     this.t = 0;
@@ -474,6 +482,15 @@ export class Rider {
       this.#grip(this.armL, this.seat.grips[0], 1);
       this.#grip(this.armR, this.seat.grips[1], -1);
     }
+    if (this.reach) this.reachAt.copy(this.reach);
+    this.reachW += ((this.reach && !sitting ? 1 : 0) - this.reachW) * (1 - Math.exp(-dt * 6));
+    if (this.reachW < 1e-3) this.reachW = 0;
+    if (this.throwT !== null) {
+      this.throwT += dt;
+      if (this.throwT >= THROW.length || sitting) this.throwT = null;
+    }
+    if (this.throwT !== null && this.locomotion === 'ride') this.#throwOnBoard(this.throwT);
+    else if (this.reachW > 0 && this.locomotion === 'ride') this.#reachOut();
 
     // Crash tumble.
     this.body.rotation.x = p.tumble;
@@ -520,6 +537,50 @@ export class Rider {
     this.torso.rotation.set(fold, p.twist * 0.12, -p.lean);
     this.head.rotation.set(-fold * 0.85, -p.twist * 0.15, p.lean * 0.6);
     this.feet.forEach((f, i) => f.position.copy(seat.feet[i]));
+  }
+
+  // Starts throwing overarm (see throw.js): on foot the whole body throws
+  // (RiderModel), on the board the trunk and arm. Not while seated.
+  startThrow() {
+    if (this.locomotion !== 'ride' && this.locomotion !== 'walk') return false;
+    this.throwT = 0;
+    return true;
+  }
+
+  // Where the right hand is (world): what it's holding.
+  hand(out = new THREE.Vector3()) {
+    if (this.model) return this.model.handAt(out);
+    this.armR.el.updateWorldMatrix(true, false);
+    return this.armR.el.localToWorld(out.set(0, -0.25, 0.01));
+  }
+
+  // Throwing on the board, `t` s in: the trunk twists back toward the tail and
+  // round toward the nose, the right mitt drawn back high, out over the top
+  // and down across, eased in and out over the carving pose.
+  #throwOnBoard(t) {
+    const k = sample(ON_BOARD, t), w = throwWeight(t), { sh, el } = this.armR;
+    this.torso.rotation.y += k.turn * w;
+    this.head.rotation.y -= k.turn * w * 0.7; // eyes stay on the target
+    const q0 = sh.quaternion.clone(), q1 = el.quaternion.clone();
+    this.root.updateMatrixWorld(true);
+    this.body.updateMatrixWorld(true);
+    const target = this.body.worldToLocal(sh.getWorldPosition(_t)).add(new THREE.Vector3().fromArray(k.rh));
+    this.#grip(this.armR, target, -1);
+    sh.quaternion.slerpQuaternions(q0, sh.quaternion.clone(), w);
+    el.quaternion.slerpQuaternions(q1, el.quaternion.clone(), w);
+  }
+
+  // On the board: the right mitt out to `reachAt`, the torso folding further
+  // down toward it, eased in by `reachW`. (A rigged rider on foot reaches in
+  // RiderModel.)
+  #reachOut() {
+    const w = this.reachW, { sh, el } = this.armR;
+    this.torso.rotation.x += 0.25 * w;
+    const q0 = sh.quaternion.clone(), q1 = el.quaternion.clone();
+    this.root.updateMatrixWorld(true);
+    this.#grip(this.armR, this.body.worldToLocal(_t.copy(this.reachAt)), -1);
+    sh.quaternion.slerpQuaternions(q0, sh.quaternion.clone(), w);
+    el.quaternion.slerpQuaternions(q1, el.quaternion.clone(), w);
   }
 
   // Two-bone IK for a primitive arm: the mitt onto `target` (body frame), the

@@ -5,6 +5,8 @@ import { createForest, GAME_FOREST } from './world/trees.js';
 import { createLifts, createPisteMarkers, createBanner, createServiceCentre, gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
 import { createOnsen, PUFF_COVER } from './world/onsen.js';
+import { Dog, DOG } from './dog/dog.js';
+import { THROW } from './player/throw.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
 import { Rider } from './player/rider.js';
@@ -264,6 +266,7 @@ function act(code, repeat = false) {
   if (code === 'KeyR' && !repeat && state === 'drive') carHome();
   if (code === 'KeyF' && !repeat && state === 'ride') toggleLocomotion();
   if (code === 'KeyM' && !repeat) openMap();
+  if (code === 'KeyQ' && !repeat && state === 'ride') throwSnowball();
   if (code === 'KeyE' && !repeat && state === 'drive') {
     if (car.phys.canExit === false) hud.toast(touch.on ? 'Land first · hold Down' : 'Land first · hold Shift', 1600);
     else getOut();
@@ -271,11 +274,13 @@ function act(code, repeat = false) {
   else if (code === 'KeyE' && !repeat && state === 'soak') leavePool();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearCar) getIn(nearCar);
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearPool) soak();
+  else if (code === 'KeyE' && !repeat && state === 'ride' && nearDog) petDog();
   else if (code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
   if ((code === 'Enter' || code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
 }
 const pressE = () => { sound.start(); act('KeyE'); }; // a tapped prompt
+const pressQ = () => { sound.start(); act('KeyQ'); };
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 window.addEventListener('focusin', (e) => { if (isControl(e.target)) keys.clear(); });
@@ -294,8 +299,9 @@ document.getElementById('mi-restart').addEventListener('click', () => {
 // keys, below; a tapped button presses E (the one by your thumb: board, get in
 // or out, skip the ride) or F (on foot, or back on the board). What they show
 // follows what you're doing (see touchLayout).
+let touchAct = 'KeyE'; // what the button by your thumb presses (see touchLayout)
 const touch = new TouchPad({
-  onTap: (name) => act(name === 'act' ? 'KeyE' : 'KeyF'),
+  onTap: (name) => act(name === 'act' ? touchAct : 'KeyF'),
   onPress: () => sound.start(),
   onMode: (on) => hud.setTouch(on),
 });
@@ -313,6 +319,8 @@ function readInput() {
   input.jump = keys.has('Space') || t.big;
   input.walk = input.tuck;
   input.run = shift || t.full; // on foot, the stick pushed all the way out runs
+  // Throwing on foot, the feet are busy with the throw.
+  if (rider.throwT !== null && rider.locomotion === 'walk') { input.walk = input.run = false; input.steer = 0; }
   pedals.throttle = input.tuck;
   pedals.reverse = input.brake;
   pedals.steer = input.steer;
@@ -453,7 +461,7 @@ const introPanel = () => touch.on ? showPanel('Hemu · 禾木', `
   <div class="keys moves">
     ${move('stick')}<span><b>Drag</b> anywhere low on the left: sideways to carve, push up to tuck, pull back to skid</span>
     ${move('ollie')}<span><b>Hold Ollie</b> and let go to jump · spin in the air</span>
-    ${move('card')}<span><b>Tap the card</b> when one pops up: ride a lift, take the pickup, the snowmobile or the Jetson ONE</span>
+    ${move('card')}<span><b>Tap the card</b> when one pops up: ride a lift, take the pickup, the snowmobile or the Jetson ONE, pet ${DOG.en} the sheepdog</span>
     ${move('map')}<span><b>Tap the map</b>, top right, for the whole mountain and the GPS</span>
   </div>
   <p class="dim">Terrain: real elevation data. Runs and lifts: OpenStreetMap / OpenSkiMap.</p>`, startRun, 'Drop in ▸') : showPanel('Hemu · 禾木', `
@@ -469,6 +477,7 @@ const introPanel = () => touch.on ? showPanel('Hemu · 禾木', `
     <span><kbd>E</kbd></span><span>board a lift at its station · take the pickup, the snowmobile or the Jetson ONE</span>
     <span><kbd>Space</kbd><kbd>Shift</kbd></span><span>in the Jetson ONE: take off and climb / come down and land</span>
     <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose under Rider</span>
+    <span><kbd>E</kbd><kbd>Q</kbd></span><span>pet <b>${DOG.en}</b> the sheepdog, up here with you · throw a snowball for it</span>
     <span><kbd>W</kbd><kbd>Shift</kbd></span><span>walk / run on foot · A/D turn · S stop</span>
     <span><kbd>R</kbd></span><span>back to the top</span>
   </div>
@@ -683,7 +692,7 @@ function poseRider(dt, snap = false) {
   if (!phys.grounded) lean *= 0.3;
   rider.pose.tumble = phys.crashed > 0 ? rider.pose.tumble + dt * 9 : 0;
   rider.update(dt, {
-    crouch: walking ? 0 : input.tuck ? 0.9 : input.brake ? 0.6 : 0.35 + phys.jumpCharge * 0.5,
+    crouch: walking ? 0 : petT > 0 ? 1 : input.tuck ? 0.9 : input.brake ? 0.6 : 0.35 + phys.jumpCharge * 0.5,
     lean: walking ? 0 : lean,
     twist: walking ? 0 : input.steer * 0.5,
     air: !walking && !phys.grounded,
@@ -810,6 +819,7 @@ function frame() {
     change = null;
   }
   onsen.update(dt, time, state === 'soak' && (!goingIn || goingIn.wet) ? rider.root.position : null);
+  updateDog(dt);
   // The spout pouring into the pool, heard from 30 m off.
   const { fall } = onsen;
   sound.setWater(fall ? 1 - THREE.MathUtils.smoothstep(Math.hypot(phys.pos.x - fall.x, phys.pos.z - fall.z), 3, 30) : 0);
@@ -822,7 +832,7 @@ function frame() {
   sun.position.copy(phys.pos).addScaledVector(sunDir, 250);
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, spray.points, specks.points, backdrop, ...forest.farMeshes, ...marks.hidden]);
+  post.render(scene, camera, time, [sky, spray.points, dog.spray.points, specks.points, backdrop, ...forest.farMeshes, ...marks.hidden]);
   requestAnimationFrame(frame);
 }
 
@@ -836,15 +846,20 @@ function touchLayout() {
   if (!shown) return;
   if (state === 'ride') {
     const walking = rider.locomotion === 'walk';
+    const act = nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
+      : nearPool ? { label: 'Soak', icon: 'in', lit: true }
+        : nearDog ? { label: 'Pet', icon: 'paw', lit: true }
+          : boardable ? { label: 'Ride up', icon: 'lift', lit: true }
+            : dogAround ? { label: 'Throw', icon: 'ball', key: 'KeyQ' } : null;
+    touchAct = act?.key ?? 'KeyE';
     touch.layout({
       layout: walking ? 'walk' : 'board',
       big: walking ? 'board' : 'ollie',
       aux: !walking && rider.canWalk ? 'foot' : null,
-      act: nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
-        : nearPool ? { label: 'Soak', icon: 'in', lit: true }
-          : boardable ? { label: 'Ride up', icon: 'lift', lit: true } : null,
+      act,
     });
   } else if (state === 'drive') {
+    touchAct = 'KeyE';
     touch.layout({
       layout: car.flies ? 'fly' : 'drive',
       big: car.flies ? 'up' : 'handbrake',
@@ -888,11 +903,12 @@ function respawnInPlace() {
 }
 
 // ---------- Lifts ----------
-let boardable = null, atHall = null, nearCar = null, nearPool = false;
+let boardable = null, atHall = null, nearCar = null, nearPool = false, nearDog = false, dogAround = false;
 function updateBoarding() {
   boardable = null;
   nearCar = null;
   nearPool = false;
+  nearDog = dogAround = false;
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = 2.5;
     for (const v of vehicles) {
@@ -901,6 +917,8 @@ function updateBoarding() {
     }
     nearPool = !nearCar && onsen.near(phys.pos.x, phys.pos.z);
     if (nearPool) rider.preloadOutfit(SOAK_OUTFIT); // ready by the time you get in
+    nearDog = !nearCar && !nearPool && phys.speed < 3 && dog.canPet(phys.pos);
+    dogAround = !nearDog && phys.speed < 3 && dog.canFetch(phys.pos) && phys.pos.distanceTo(dog.pos) < 15;
   }
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = Infinity;
@@ -914,11 +932,13 @@ function updateBoarding() {
   atHall = hall;
   if (nearCar) hud.prompt(nearCar.prompt, nearCar.touch.prompt, pressE);
   else if (nearPool) hud.prompt('<kbd>E</kbd> soak in the <b>hot spring</b>', 'Soak in the <b>hot spring</b> ▸', pressE);
+  else if (nearDog) hud.prompt(`<kbd>E</kbd> pet <b>${DOG.en}</b> · <kbd>Q</kbd> throw a snowball`, `Pet <b>${DOG.en}</b> ▸`, pressE);
   else if (boardable) {
     const where = hall ? `${hall.en} · ` : '';
     const up = `<b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`;
     hud.prompt(`${where}<kbd>E</kbd> ride ${up}`, `${where}Ride ${up} ▸`, pressE);
   } else if (!timing && spawn.hint) hud.prompt(spawn.hint, spawn.touchHint);
+  else if (dogAround) hud.prompt(`<kbd>Q</kbd> throw a snowball for <b>${DOG.en}</b>`, `Throw a snowball for <b>${DOG.en}</b> ▸`, pressQ);
   else hud.prompt('');
 }
 
@@ -1012,6 +1032,81 @@ function facing(at, or) {
   const len = Math.hypot(at.dx, at.dz);
   if (len < 1e-4) { at.dx = or.x; at.dz = or.z; } else { at.dx /= len; at.dz /= len; }
   return at;
+}
+
+// ---------- Mantou ----------
+// The resort's Old English Sheepdog lives up at the top for now, on the snow a
+// few metres off to the side of where you start, looking across at you (see
+// src/dog/dog.js). It notices you, comes over, keeps you company and chases
+// after you. E beside it pets it (the rider reaches down to it); Q throws a
+// snowball for it, wherever you are, in the way the camera looks.
+const dogHome = (() => {
+  const s = startAt;
+  const at = openSpot(s, [8, 10, 12], (x, z, n, R) => {
+    const ax = (x - s.x) / R, az = (z - s.z) / R;
+    const ahead = ax * s.dx + az * s.dz, side = Math.abs(ax * s.dz - az * s.dx);
+    return side * 2 - Math.max(0, ahead) * 3 - (1 - n.y) * 10 - R * 0.05;
+  }) ?? { x: s.x - s.dz * 8, z: s.z + s.dx * 8 };
+  return { x: at.x, z: at.z, yaw: Math.atan2(s.x - at.x, s.z - at.z) };
+})();
+const dog = new Dog({ hf: detail, forest, obstacles: phys.obstacles, home: dogHome });
+scene.add(dog.root, dog.spray.points, dog.ball.mesh);
+dog.ready.catch((err) => console.warn('The dog failed to load; it stays out of the game.', err));
+// You, as the dog sees you: there on the snow (or about to drop in), or nowhere.
+const dogSees = { pos: phys.pos, vel: phys.vel, head: new THREE.Vector3(), facing: new THREE.Vector3(), crashed: false };
+function forDog() {
+  if (state !== 'ride' && state !== 'intro') return null;
+  dogSees.head.copy(phys.pos).y += phys.crashed > 0 ? 0.4 : 1.45; // down on the snow after a fall
+  // The way your chest faces: ahead on foot, the toe side on the board.
+  if (rider.locomotion === 'walk') phys.forward(dogSees.facing);
+  else dogSees.facing.set(1, 0, 0).applyQuaternion(rider.root.quaternion);
+  dogSees.facing.setY(0).normalize();
+  dogSees.crashed = phys.crashed > 0;
+  return dogSees;
+}
+let petT = 0; // s left of the rider's reach down to the dog
+let helloT = -1e9; // when it last came to say hello
+function updateDog(dt) {
+  // A snowball being thrown is in the hand until it's let go, and a rider on
+  // foot turns to face where it's going.
+  if (rider.throwT !== null) {
+    dog.ball.hold(rider.hand(_hand));
+    if (rider.locomotion === 'walk') {
+      const err = THREE.MathUtils.euclideanModulo(yawOf(throwDir.x, throwDir.z) - phys.yaw + Math.PI, Math.PI * 2) - Math.PI;
+      phys.yaw += err * (1 - Math.exp(-dt * 12));
+    }
+  }
+  dog.update(dt, time, forDog(), camera);
+  // Heard from where the camera is: a bark carries 60 m.
+  const hear = (p) => 1 - THREE.MathUtils.smoothstep(camera.position.distanceTo(p), 4, 60);
+  for (const ev of dog.events.splice(0)) {
+    if (ev.type === 'hello') { if (time - helloT > 60) hud.toast(`${DOG.zh} · ${DOG.en}`, 2000); helloT = time; } // its name, once in a while
+    else sound[ev.type]?.(hear(ev.at));
+  }
+  sound.setPant(dog.body ? dog.body.eased.pant * (1 - THREE.MathUtils.smoothstep(camera.position.distanceTo(dog.pos), 2, 14)) : 0);
+  // Petting, the rider's hand goes to the top of its head once it's sat down
+  // by them (the pet lasts from then on).
+  const petted = dog.state === 'petted' || dog.state === 'belly';
+  const close = petted && dog.speed < 0.3 && phys.pos.distanceTo(dog.pos) < 1.4;
+  if (!petted) petT = 0;
+  else if (close) petT = Math.max(0, petT - dt);
+  rider.reach = petT > 0 && close && state === 'ride' ? dog.headTop(_reach) : null;
+}
+const _reach = new THREE.Vector3(), _hand = new THREE.Vector3();
+function petDog() {
+  dog.pet(forDog());
+  petT = 2.2;
+}
+// A snowball, thrown overarm the way the camera looks (see throw.js): it
+// leaves the hand at THROW.release, and the dog is off at the wind-up.
+const throwDir = new THREE.Vector3();
+const _throw = new THREE.Vector3();
+function throwSnowball() {
+  if (!phys.grounded || phys.crashed > 0 || dog.ball.busy || rider.throwT !== null) return;
+  throwDir.copy(camDir).setY(0).normalize();
+  if (!rider.startThrow()) return;
+  _throw.copy(phys.pos).addScaledVector(throwDir, 0.3).y += 1.5; // about where it'll leave the hand
+  dog.throwBall(_throw, throwDir, THROW.release);
 }
 
 // ---------- Driving ----------
@@ -1583,5 +1678,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, onsen, soak, leavePool, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, onsen, soak, leavePool, dog, petDog, throwSnowball, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

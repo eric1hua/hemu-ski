@@ -1,6 +1,7 @@
 // Procedural sound: wind that rises with speed, a scrape for edge/skid, the
-// engine of the pickup or the snowmobile, or the Jetson ONE's rotors, and the
-// hot spring's spout pouring into its pool.
+// engine of the pickup or the snowmobile, or the Jetson ONE's rotors, the
+// hot spring's spout pouring into its pool, and the dog: its bark, its whine,
+// its panting, and snowballs thrown for it, landing and bursting.
 // Effects and music play through their own buses, switched from the menu.
 export class Sound {
   constructor() {
@@ -20,6 +21,7 @@ export class Sound {
     const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    this.noiseBuf = buf;
     const noise = () => {
       const s = ctx.createBufferSource();
       s.buffer = buf;
@@ -49,6 +51,21 @@ export class Sound {
     this.waterG.gain.value = 0;
     noise().connect(this.waterF).connect(this.waterG).connect(this.sfx);
 
+    // The dog panting: breathy noise in a band, puffing in and out.
+    this.pantF = ctx.createBiquadFilter();
+    this.pantF.type = 'bandpass';
+    this.pantF.frequency.value = 1500;
+    this.pantF.Q.value = 1.2;
+    this.pantG = ctx.createGain();
+    this.pantG.gain.value = 0;
+    this.pantLfo = ctx.createOscillator();
+    this.pantLfo.frequency.value = 2.8;
+    this.pantDepth = ctx.createGain();
+    this.pantDepth.gain.value = 0;
+    this.pantLfo.connect(this.pantDepth).connect(this.pantG.gain);
+    this.pantLfo.start();
+    noise().connect(this.pantF).connect(this.pantG).connect(this.sfx);
+
     // Engine: a sawtooth and a square an octave down, through a low-pass that
     // opens on the throttle.
     this.engF = ctx.createBiquadFilter();
@@ -77,6 +94,78 @@ export class Sound {
     const t = this.ctx.currentTime;
     this.waterG.gain.setTargetAtTime(level * 0.08, t, 0.3);
     if (level > 0) this.waterF.frequency.setTargetAtTime(700 + Math.random() * 1600, t, 0.025);
+  }
+  // The dog. `level` (0…1) is how loud it is where you are.
+  // A woof: a buzzy voice that jumps up and falls away through a mouth-shaped
+  // band-pass, with a breathy edge.
+  bark(level = 1) {
+    if (!this.ctx || level <= 0.01) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.01, f0 = 300 + Math.random() * 70;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0 * 0.8, t);
+    o.frequency.linearRampToValueAtTime(f0 * 1.2, t + 0.03);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.5, t + 0.2);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(1100, t);
+    bp.frequency.exponentialRampToValueAtTime(520, t + 0.2);
+    const g = this.#envelope(t, 0.012, 0.22, 0.5 * level);
+    o.connect(bp).connect(g).connect(this.sfx);
+    o.start(t);
+    o.stop(t + 0.26);
+    this.#puff(t, 0.12, 2400, 0.12 * level, 'highpass');
+  }
+  // A little whine: a thin rising and falling note, wavering.
+  whine(level = 1) {
+    if (!this.ctx || level <= 0.01) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.01;
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(760, t);
+    o.frequency.linearRampToValueAtTime(1150, t + 0.25);
+    o.frequency.linearRampToValueAtTime(820, t + 0.7);
+    const wob = ctx.createOscillator(), depth = ctx.createGain();
+    wob.frequency.value = 7;
+    depth.gain.value = 25;
+    wob.connect(depth).connect(o.frequency);
+    const g = this.#envelope(t, 0.08, 0.75, 0.06 * level);
+    o.connect(g).connect(this.sfx);
+    o.start(t);
+    wob.start(t);
+    o.stop(t + 0.8);
+    wob.stop(t + 0.8);
+  }
+  // A snowball bursting in the dog's jaws, or thumping into the snow.
+  pop(level = 1) { if (this.ctx) this.#puff(this.ctx.currentTime, 0.12, 900, 0.25 * level, 'lowpass'); }
+  thud(level = 1) { if (this.ctx) this.#puff(this.ctx.currentTime, 0.09, 380, 0.3 * level, 'lowpass'); }
+  // A snowball leaving the hand.
+  swish(level = 1) { if (this.ctx) this.#puff(this.ctx.currentTime, 0.14, 2600, 0.06 * level, 'bandpass'); }
+  // Panting, 0…1.
+  setPant(level) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.pantG.gain.setTargetAtTime(level * 0.018, t, 0.2);
+    this.pantDepth.gain.setTargetAtTime(level * 0.018, t, 0.2);
+  }
+  // A gain that swells over `attack` s to `peak` and dies away by `end`.
+  #envelope(t, attack, end, peak) {
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + end);
+    return g;
+  }
+  // A short burst of filtered noise.
+  #puff(t, dur, hz, peak, type) {
+    const s = this.ctx.createBufferSource();
+    s.buffer = this.noiseBuf;
+    const f = this.ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = hz;
+    s.connect(f).connect(this.#envelope(t, 0.008, dur, peak)).connect(this.sfx);
+    s.start(t, Math.random());
+    s.stop(t + dur + 0.05);
   }
   setMusic(on) {
     this.musicOn = on;

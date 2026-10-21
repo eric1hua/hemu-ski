@@ -105,6 +105,29 @@ side; about 15 s, and E gets her out at any point. Getting out, she changes
 back into her ski gear. The male and classic riders have no swimsuit yet, so
 they slide in as they are.
 
+Up at the top lives **Mantou** (馒头), the resort's Old English Sheepdog, on
+the snow a few metres off to the side of where you start. On its own it
+potters about its spot: looks round, sniffs the snow, shakes it off its coat.
+When nobody comes by for a while it sits, lies down with a yawn and curls up
+asleep, nose to tail. Come within about 30 m (or 10 m, once it's asleep) and
+it wakes, watches you, and trots over, tail going, to say hello with a play
+bow, a bounce or a bark. Then it keeps you company: it sits by you while you
+stand, follows you about at your pace, and chases after you when you ride
+off, barking, until you're too fast or too far from home, when it pulls up,
+barks after you and trots back to its spot. Stand beside it and press **E**
+to pet it: it sits in front of you and leans up into your hand while you bend
+down to it, tail sweeping the snow, and if you keep at it, it rolls over for
+a belly rub. **Q** throws a snowball, the way the camera looks, overarm like
+a baseball: on foot you draw your right arm back as your right foot steps back
+and you turn away, then turn through and let go high out in front, following
+through as the right foot comes forward (on the board, feet strapped in, only
+the arm and trunk throw). It's off at the wind-up, bounding after it, leaping
+to snap it out of the air if it gets under it in time, or
+pouncing where it lands and digging for it, then cocking its head, puzzled,
+when it's gone, and coming back to you. Take a fall nearby and it runs over
+to check you're all right. You hear it bark and whine, and pant after a run.
+On a touch screen the button says **Pet**, or **Throw** when it's near.
+
 A menu rail on the left edge links to the diorama, takes you back to the start
 (R), picks your rider (**Rider**:
 male, female or the classic one; the female rider can also walk and run off the
@@ -217,7 +240,8 @@ edits were saved.
 | W (↑) | tuck; push along on the flat |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
-| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup or the Jetson ONE, or on or off the snowmobile, beside it; get in or out of the hot spring |
+| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup or the Jetson ONE, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it |
+| Q | throw a snowball for the dog |
 | In the hot spring | A / D look around, E get out |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
 | In the pickup or on the snowmobile | W drive, S brake / reverse, A / D steer, Space handbrake, R back to the hall |
@@ -319,6 +343,36 @@ edits were saved.
   then fades into the seated soaking pose. There's no clip for undressing; the
   puff of steam covers the change.
 
+- `src/dog/` is the dog. `scripts/export-dog.py` exports it from Blender
+  (`public/models/dog/`, see its README): the Tripo mesh on a plain 35-bone
+  skeleton built from its Rigify rig's deform bones. It has no clips: it's
+  posed in code every frame. `rig.js` turns the bones to a pose: the hips
+  placed and turned, the spine's bend shared out along it, the neck and head
+  sharing a turn toward where it looks, kept upright, the jaw, tongue and a
+  tail that lifts and wags with each bone lagging the last, and each leg
+  reaching its paw with two-bone IK, the joint bending the way it does at
+  rest. `body.js` blends postures (standing, sitting, lying down, curled up
+  asleep, flopped on its side, belly up, the play bow, rearing up), a gait
+  whose stride, timing and footfalls follow its speed and turning (a walk,
+  then a trot from about 1.4 m/s, a gallop from about 4.5, its spine bunching
+  and stretching), with each paw sliding back under the body as fast as the
+  body goes over it while it's down, so it doesn't skate, and what plays over
+  the top: breathing, panting, sniffing, digging, leaning into a hand,
+  squirming, a cocked head, barking, yawning, sneezing, shaking off snow and
+  leaping. Paws stand on the snow under them, and the body pitches with
+  most of the slope. `dog.js` decides what it does (a state for each of the
+  above) and steers it round trees, buildings and holes; the rider's hand
+  reaches its head by two-bone IK, on the board (crouched) or on foot (bent
+  over, the walk clip giving way to it).
+- `src/player/throw.js` is the overarm throw, as key poses eased from one to
+  the next: on foot (RiderModel) the hips sink, shift and turn, the spine turns
+  on round and leans, the head turns back to keep its eyes on the target, the
+  legs step by IK (the right foot back and turned out, then through), and both
+  hands go where the keys put them from their shoulders by IK, the throwing
+  hand closed on the ball until it lets go; on the board (Rider) the trunk
+  twists and the arm throws over the carving pose. The snowball sits in the
+  hand and leaves from wherever the hand is at the release.
+
 ## What's approximate
 
 - The DEM comes from ~30 m source data and is smoothed, so small bumps and
@@ -330,6 +384,10 @@ edits were saved.
 - The two service centres are placed from OpenStreetMap (East) and the trail
   map (West, beside 3号's bottom station); the buildings are stylised.
 - Lift rides are sped up to 10–22 s.
+- The dog's moves are made in code, not keyframed, so they're simpler than
+  an animator's: its ears, eyelids and lips don't move (they have no weights
+  in the rig), and its fur stretches a little at the hips when it sits or lies
+  down. It's 0.6 m at the shoulder, about right for its breed.
 - The Jetson ONE is scaled to 3.1 m (a real one is about 2.5 m) so the riders'
   big heads fit under its roll cage. It's much faster than the real one
   (180 km/h against 102, and it climbs at 15 m/s), flies as long as you like, and its

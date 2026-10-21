@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
+import { THROW, ON_FOOT, sample, throwWeight } from './throw.js';
 
 // `seat`: how high the Hips bone sits above a seat's cushion (metres), for the
 // thighs' thickness. `outfits`: other sets of clothes, each a whole model on
@@ -138,6 +139,7 @@ export class RiderModel {
     this.thigh = pos('LeftLeg').distanceTo(pos('LeftUpLeg'));
     this.shin = pos('LeftFoot').distanceTo(pos('LeftLeg'));
     this.ankle = pos('LeftFoot'); // height and depth of the ankle above the sole
+    this.hipsBind = pos('Hips'); // where the hips joint stands at rest (model frame)
     this.armDir = {
       Left: [pos('LeftForeArm').sub(pos('LeftArm')).normalize(), childDir(this.bones.LeftForeArm.bone, this.root)],
       Right: [pos('RightForeArm').sub(pos('RightArm')).normalize(), childDir(this.bones.RightForeArm.bone, this.root)],
@@ -150,6 +152,7 @@ export class RiderModel {
     this.foreArm = pos('LeftForeArm').distanceTo(pos('LeftHand'));
     // Wrist to the middle of the palm, where the grip goes.
     this.palm = byName.LeftHandMiddle1 ? pos('LeftHand').distanceTo(at(byName.LeftHandMiddle1)) * 0.6 : 0;
+    this.palmBone = byName.RightHandMiddle1 ?? null; // toward it from the wrist: the middle of the palm
     // The rider's build, for Rider's seated pose (body units): as its CLASSIC_BUILD.
     const S = this.scale;
     this.build = {
@@ -212,6 +215,8 @@ export class RiderModel {
       this.run.setEffectiveTimeScale(speed < 0.05 ? 0 : THREE.MathUtils.clamp(speed / 4, 0.25, 1.5));
       this.mixer.update(dt);
       this.#copyAnimated();
+      if (rider.throwT != null) this.#throw(rider.throwT);
+      else if (rider.reachW > 0) this.#reach(rider.reachAt, rider.reachW);
     } else {
       // Clips animate all 65 bones; restore all of them before procedural posing.
       for (const { bone, p, q, s } of this.rest) {
@@ -381,31 +386,122 @@ export class RiderModel {
     }
   }
 
+  // Where the middle of the right palm is (world): what it's holding.
+  handAt(out) {
+    this.bones.RightHand.bone.getWorldPosition(out);
+    return this.palmBone ? out.lerp(this.palmBone.getWorldPosition(_a), 0.6) : out;
+  }
+
+  // On foot, throwing (see throw.js), `t` s in: the whole body posed from the
+  // throw's keys, taking over from the clip's pose and handing back to it.
+  #throw(t) {
+    const k = sample(ON_FOOT, t), w = throwWeight(t), S = this.scale;
+    const names = ['Hips', 'Spine', 'Spine1', 'Head', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot',
+      'LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm'];
+    const from = names.map((n) => this.bones[n].bone.quaternion.clone());
+    const hips = this.bones.Hips.bone, hipsFrom = hips.position.clone();
+    // The hips sunk, shifted and turned; the spine turns on round and leans;
+    // the head turns back to keep its eyes on the target.
+    this.root.updateMatrixWorld(true);
+    _v.copy(this.hipsBind).add(_w.set(0, -k.drop, k.shift).divideScalar(S));
+    hips.position.copy(hips.parent.worldToLocal(this.root.localToWorld(_v)));
+    this.#turn('Hips', _q.setFromEuler(_e.set(0, k.turn * 0.4, 0)));
+    this.#turn('Spine', _q.setFromEuler(_e.set(k.lean * 0.5, k.turn * 0.3, 0)));
+    this.#turn('Spine1', _q.setFromEuler(_e.set(k.lean * 0.5, k.turn * 0.3, 0)));
+    this.#turn('Head', _q.setFromEuler(_e.set(-k.lean * 0.7, -k.turn * 0.9, 0)));
+    this.root.updateMatrixWorld(true);
+    this.#legTo('Left', 1, k.lf, 0, 0);
+    this.#legTo('Right', -1, k.rf, k.rfLift, k.rfYaw);
+    // Each hand from where its shoulder has got to.
+    for (const [side, sign, hand, bend] of [['Right', -1, k.rh, k.rb], ['Left', 1, k.lh, k.lb]]) {
+      const target = this.#modelPos(side + 'Arm', new THREE.Vector3()).add(_w.fromArray(hand).divideScalar(S));
+      this.#armTo(side, sign, target, _b.fromArray(bend).normalize());
+    }
+    names.forEach((n, i) => this.bones[n].bone.quaternion.slerpQuaternions(from[i], this.bones[n].bone.quaternion.clone(), w));
+    hips.position.lerpVectors(hipsFrom, hips.position.clone(), w);
+    // The ball hand closed round it until it lets go.
+    const grip = k.grip * w * (t < THROW.release ? 1 : 1 - THREE.MathUtils.smoothstep(t, THROW.release, THROW.release + 0.08));
+    if (grip > 0) for (const f of this.fingers) if (f.bone.name.includes('RightHand')) f.bone.quaternion.multiply(_q.setFromAxisAngle(f.axis, f.angle * 0.9 * grip));
+  }
+
+  // Two-bone IK for a leg on foot: the ankle over `spot` ([x, z], body frame,
+  // metres) lifted `lift` off the snow, the knee forward and a little out, the
+  // foot flat and its toes turned `yaw` (radians, + to the left).
+  #legTo(side, sign, [x, z], lift, yaw) {
+    const ankle = this.#fromBody(_v.set(x, 0, z), new THREE.Vector3());
+    ankle.y = this.ankle.y + lift / this.scale;
+    ankle.z += this.ankle.z;
+    const hip = this.#modelPos(side + 'UpLeg', new THREE.Vector3());
+    const d = ankle.clone().sub(hip);
+    const len = Math.min(d.length(), this.thigh + this.shin - 1e-4);
+    d.normalize();
+    const along = (this.thigh ** 2 - this.shin ** 2 + len ** 2) / (2 * len);
+    const up = Math.sqrt(Math.max(0, this.thigh ** 2 - along ** 2));
+    const bend = FWD.clone().applyAxisAngle(_b.set(0, 1, 0), yaw * 0.5).addScaledVector(d, -FWD.dot(d));
+    bend.x += sign * 0.12;
+    bend.normalize();
+    const knee = hip.clone().addScaledVector(d, along).addScaledVector(bend, up);
+    this.#aim(side + 'UpLeg', hip, this.#modelPos(side + 'Leg', new THREE.Vector3()), knee.clone().sub(hip).normalize());
+    const kneeNow = this.#modelPos(side + 'Leg', new THREE.Vector3());
+    this.#aim(side + 'Leg', kneeNow, this.#modelPos(side + 'Foot', new THREE.Vector3()), ankle.clone().sub(kneeNow).normalize());
+    const f = this.bones[side + 'Foot'];
+    const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const parentQ = f.bone.parent.getWorldQuaternion(new THREE.Quaternion());
+    f.bone.quaternion.copy(parentQ.invert().multiply(rootQ).multiply(_q.setFromAxisAngle(_b.set(0, 1, 0), yaw)).multiply(f.modelQ));
+    f.bone.updateMatrixWorld(true);
+  }
+
+  // On foot, bending down to a world point and reaching the right hand out to
+  // it (petting the dog), the clip's pose giving way to it by `w` (0–1).
+  #reach(point, w) {
+    const names = ['Spine', 'Spine1', 'RightArm', 'RightForeArm'];
+    const from = names.map((n) => this.bones[n].bone.quaternion.clone());
+    this.root.updateMatrixWorld(true);
+    const target = this.root.worldToLocal(_w.copy(point));
+    const sh = this.#modelPos('RightArm', new THREE.Vector3());
+    // The lower it is, the further the back bends (about the hips' sideways axis).
+    const fold = THREE.MathUtils.clamp((sh.y - target.y) / (this.upperArm + this.foreArm) * 0.55, 0, 0.75);
+    const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ);
+    for (const n of ['Spine', 'Spine1']) {
+      const b = this.bones[n].bone;
+      const d = _q.setFromAxisAngle(axis, fold / 2);
+      const parentQ = b.parent.getWorldQuaternion(new THREE.Quaternion());
+      b.quaternion.copy(parentQ.invert().multiply(d).multiply(b.getWorldQuaternion(_r)));
+      b.updateMatrixWorld(true);
+    }
+    this.#armTo('Right', -1, target);
+    names.forEach((n, i) => this.bones[n].bone.quaternion.slerpQuaternions(from[i], this.bones[n].bone.quaternion.clone(), w));
+  }
+
   // Seated: each hand onto its grip (body frame), the palm on the bar and the
   // fingers round it, the elbows bent out, down and back.
   #grip(grips) {
     this.root.updateMatrixWorld(true);
-    for (const [i, side, sign] of [[0, 'Left', 1], [1, 'Right', -1]]) {
-      const grip = this.#fromBody(grips[i], new THREE.Vector3());
-      const sh = this.#modelPos(side + 'Arm', new THREE.Vector3());
-      // The wrist, a palm's length back from the grip toward the shoulder and a
-      // little above it.
-      const wrist = grip.clone().addScaledVector(sh.clone().sub(grip).normalize(), this.palm);
-      wrist.y += this.palm * 0.5;
-      const d = wrist.clone().sub(sh);
-      const len = Math.min(d.length(), this.upperArm + this.foreArm - 1e-4);
-      d.normalize();
-      const along = (this.upperArm ** 2 - this.foreArm ** 2 + len ** 2) / (2 * len);
-      const out = Math.sqrt(Math.max(0, this.upperArm ** 2 - along ** 2));
-      const bend = new THREE.Vector3(sign * 0.8, -1, -0.4);
-      bend.addScaledVector(d, -bend.dot(d)).normalize();
-      const elbow = sh.clone().addScaledVector(d, along).addScaledVector(bend, out);
-
-      this.#aim(side + 'Arm', sh, this.#modelPos(side + 'ForeArm', new THREE.Vector3()), elbow.clone().sub(sh).normalize());
-      const elbowNow = this.#modelPos(side + 'ForeArm', new THREE.Vector3());
-      this.#aim(side + 'ForeArm', elbowNow, this.#modelPos(side + 'Hand', new THREE.Vector3()), wrist.clone().sub(elbowNow).normalize());
-    }
+    for (const [i, side, sign] of [[0, 'Left', 1], [1, 'Right', -1]]) this.#armTo(side, sign, this.#fromBody(grips[i], new THREE.Vector3()));
     for (const { bone, axis, angle } of this.fingers) bone.quaternion.multiply(_q.setFromAxisAngle(axis, angle));
+  }
+
+  // Two-bone IK: the hand onto `grip` (model frame), the elbow bent out to the
+  // side (`sign`: 1 left, -1 right), down and back, or the way `bend` says.
+  #armTo(side, sign, grip, bend = null) {
+    const sh = this.#modelPos(side + 'Arm', new THREE.Vector3());
+    // The wrist, a palm's length back from the grip toward the shoulder and a
+    // little above it.
+    const wrist = grip.clone().addScaledVector(sh.clone().sub(grip).normalize(), this.palm);
+    wrist.y += this.palm * 0.5;
+    const d = wrist.clone().sub(sh);
+    const len = Math.min(d.length(), this.upperArm + this.foreArm - 1e-4);
+    d.normalize();
+    const along = (this.upperArm ** 2 - this.foreArm ** 2 + len ** 2) / (2 * len);
+    const out = Math.sqrt(Math.max(0, this.upperArm ** 2 - along ** 2));
+    const hint = bend ? bend.clone() : new THREE.Vector3(sign * 0.8, -1, -0.4);
+    hint.addScaledVector(d, -hint.dot(d)).normalize();
+    const elbow = sh.clone().addScaledVector(d, along).addScaledVector(hint, out);
+
+    this.#aim(side + 'Arm', sh, this.#modelPos(side + 'ForeArm', new THREE.Vector3()), elbow.clone().sub(sh).normalize());
+    const elbowNow = this.#modelPos(side + 'ForeArm', new THREE.Vector3());
+    this.#aim(side + 'ForeArm', elbowNow, this.#modelPos(side + 'Hand', new THREE.Vector3()), wrist.clone().sub(elbowNow).normalize());
   }
 }
 
