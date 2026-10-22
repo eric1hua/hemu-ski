@@ -1,6 +1,6 @@
 # Female rider runtime assets
 
-Copied verbatim from `tirpo assets lab/03-tripo-exports/female-rider-studio-v03/` for Vite production serving. `player.glb` remains the male rider.
+Copied verbatim from the asset lab's `03-tripo-exports/female-rider-studio-v03/` for Vite production serving. `player.glb` remains the male rider.
 
 - `female-rider-rigfix-walk-run-tex2k-v03.glb`: SHA-256 `3b0a183b0d0e80b8953a5142340347ce399990f4397f76538cdb7a9d2d8f871d`; includes the existing rigid-head and run-hip corrections. No runtime reprocessing.
 - `board-assembly-seg-tex2k-v01.glb`: SHA-256 `31c402f7d86537671f8104a89607946d3478999e844fb0224cbabfc9147301b4`.
@@ -19,4 +19,4 @@ Verification (2026-10-17): production build and diff checks passed. `node script
 
   Its three clips, all in place (no travel), are used for getting in, by how their names start: `Go upstairs, then go downstairs.001` (5 s; `ledge`: a high step up of 0.48 m, a pause on top, then three small steps down that end 0.21 m up), `walk.001` (2.4 s; `wade`, the same walk as the ski model's) and `Like stepping down a few steps, then putting one foot into the ` (5 s, the name cut off at 63 characters; `sitDown`: arms stretched overhead, a squat, then sitting on the ground with legs out, leaning back, hands resting forward). There is no undressing clip, and the sitting down is the end of `sitDown`, not a clip of its own.
 
-Inputs and Tripo steps for the swimsuit: `tirpo assets lab/02-inputs/female-rider-swim-v01/README.md` (local only).
+Inputs and Tripo steps for the swimsuit: the asset lab's `02-inputs/female-rider-swim-v01/README.md` (local only).

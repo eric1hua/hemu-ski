@@ -264,8 +264,8 @@ edits were saved.
   fog and instancing still work.
 - `src/render/post.js` draws ink lines from depth (silhouettes) and normals
   (creases), with jittered offsets for a hand-drawn line, plus paper grain.
-- `src/player/rider.js` builds the snowboarder from primitives after the
-  character sheet in `refs/player-turnaround.webp`. The face is a painted
+- `src/player/rider.js` builds the snowboarder from primitives after a
+  character turnaround sheet (kept in the local asset lab). The face is a painted
   canvas texture, and the legs use two-bone IK.
 - `src/gps/route.js` builds the GPS's graph from the runs (resampled every
   25 m and ridden downhill, crossing onto other runs where they meet) and the
@@ -343,7 +343,7 @@ edits were saved.
   then fades into the seated soaking pose. There's no clip for undressing; the
   puff of steam covers the change.
 
-- `src/dog/` is the dog. `scripts/export-dog.py` exports it from Blender
+- `src/dog/` is the dog. The asset lab exports it from Blender
   (`public/models/dog/`, see its README): the Tripo mesh on a plain 35-bone
   skeleton built from its Rigify rig's deform bones. It has no clips: it's
   posed in code every frame. `rig.js` turns the bones to a pose: the hips

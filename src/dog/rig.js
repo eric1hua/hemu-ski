@@ -1,7 +1,7 @@
 // The Old English Sheepdog's skeleton, posed in code every frame rather than
-// from clips (public/models/dog/, exported from its Rigify rig by
-// scripts/export-dog.py). Dog (dog.js) decides what the dog is doing and hands
-// this a pose; this turns the bones to match.
+// from clips (public/models/dog/, exported from its Rigify rig by the asset
+// lab's scripts/export-dog.py). Dog (dog.js) decides what the dog is doing and
+// hands this a pose; this turns the bones to match.
 //
 // Model frame: +z forward, +x the dog's left, +y up, the paws on the ground at
 // y = 0, about a unit from nose to tail. Every bone points along its own +y,

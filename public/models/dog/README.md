@@ -1,10 +1,6 @@
 # Old English Sheepdog
 
-`old-english-sheepdog.glb`: Mantou (馒头), the dog who lives at the top of the mountain (`src/dog/`). A Tripo-made shaggy cream sheepdog, rigged in Blender with Rigify's wolf rig, exported by `scripts/export-dog.py` from `tirpo assets lab/03-tripo-exports/white-dog-wolf-rig-v01/white-dog-wolf-rig-v06.blend` (local only). The .blend is read and never saved:
-
-```bash
-/Applications/Blender.app/Contents/MacOS/Blender -b "tirpo assets lab/03-tripo-exports/white-dog-wolf-rig-v01/white-dog-wolf-rig-v06.blend" --python scripts/export-dog.py -- "$PWD/public/models/dog/old-english-sheepdog.glb"
-```
+`old-english-sheepdog.glb`: Mantou (馒头), the dog who lives at the top of the mountain (`src/dog/`). A Tripo-made shaggy cream sheepdog, rigged in Blender with Rigify's wolf rig, exported by the asset lab's `scripts/export-dog.py` from its `03-tripo-exports/white-dog-wolf-rig-v01/white-dog-wolf-rig-v06.blend`. The lab is local only, in `~/Developer/hemu-ski-asset-lab` beside this repo; the command is at the top of the script. The .blend is read and never saved.
 
 One mesh (8,640 vertices, 10.9k faces, every vertex weighted, four weights each at most), one material with a 2K JPEG base colour (down from the source's 8K), no animations. About a unit long nose to tail and 0.71 tall to the top of its head, its paws on the ground at y = 0, facing +z with its left toward +x. The game shows it at 1.3 times that: 0.6 m at the shoulder.
 

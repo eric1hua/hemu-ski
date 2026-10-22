@@ -1,8 +1,9 @@
-// The player, built after the character turnaround sheet in
-// refs/player-turnaround.webp: chibi proportions, brown messy hair, slouchy
-// cream beanie with goggles pushed up, cream jacket with a navy hem and cuffs,
-// chest harness with a yellow badge and pouch, black backpack with orange
-// pulls, cream/navy pants with zip piping, black boots with orange straps.
+// The player, built after the character turnaround sheet in the asset lab
+// (00-references/player-turnaround-original.webp): chibi proportions, brown
+// messy hair, slouchy cream beanie with goggles pushed up, cream jacket with a
+// navy hem and cuffs, chest harness with a yellow badge and pouch, black
+// backpack with orange pulls, cream/navy pants with zip piping, black boots
+// with orange straps.
 // Built from primitives so it matches the flat cel-shaded world.
 import * as THREE from 'three';
 import { makeToon } from '../render/toon.js';

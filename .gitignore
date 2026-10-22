@@ -3,9 +3,5 @@ dist
 .DS_Store
 .cache
 
-# Local-only: the Tripo asset lab and its reference material stay off GitHub
-tirpo assets lab/
-refs/tripo/
-assets/
 # Local browser-check screenshots
 output/
