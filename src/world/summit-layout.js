@@ -38,9 +38,9 @@ export const SUMMIT = {
     },
     ...[[-37.4, -5.2], [-43.6, -3.2], [-49.8, -1.2]].map((at, i) => ({
       id: `summit:object-3-set-${i + 1}`, label: `3·${i + 1}`, kind: 'prayerWheels', en: `Prayer wheels ${i + 1} of 3`, zh: `转经轮 第${i + 1}组`,
-      at, yaw: 0.31, size: [2.3, 0.8],
+      at, yaw: 0.31, size: [2.7, 0.75],
       from: i ? {} : { A: [0.5645, 0.6639], B: [0.16, 0.4847], C: [0.5883, 0.4416], D: [0.2853, 0.5441] },
-      how: 'The arrows mark the area only. Three sets 2 m apart along the long roof seen in A and D (which cast to x -35 to -48), from G6 toward the ovoo; each set\'s own place and turn are estimates.',
+      how: 'The arrows mark the area only. Three sets in a row, 6.5 m apart, along the long roof seen in A and D (which cast to x -35 to -48), from G6 toward the ovoo; each set\'s own place and turn are estimates. Their fronts face the path out to the ovoo, so it passes them on your right.',
     })),
     {
       id: 'summit:object-4', label: '4', kind: 'ovoo', en: 'Ovoo and prayer flags', zh: '敖包与经幡',

@@ -1,8 +1,11 @@
 // Procedural sound: wind that rises with speed, a scrape for edge/skid, the
 // engine of the pickup or the snowmobile, or the Jetson ONE's rotors, the
-// hot spring's spout pouring into its pool, and the dog: its bark, its whine,
-// its panting, and snowballs thrown for it, landing and bursting.
+// hot spring's spout pouring into its pool, the dog: its bark, its whine,
+// its panting, and snowballs thrown for it, landing and bursting; and the
+// mantra chanted while the prayer wheels turn (mantra.js).
 // Effects and music play through their own buses, switched from the menu.
+import { Mantra } from './mantra.js';
+
 export class Sound {
   constructor() {
     this.ctx = null;
@@ -94,6 +97,28 @@ export class Sound {
     const t = this.ctx.currentTime;
     this.waterG.gain.setTargetAtTime(level * 0.08, t, 0.3);
     if (level > 0) this.waterF.frequency.setTargetAtTime(700 + Math.random() * 1600, t, 0.025);
+  }
+  // The mantra while the prayer wheels turn: `level` (0…1) is how loud, by
+  // how many turn and how near they are. It begins at Om, says itself over
+  // and over, and stops a while after it has faded away.
+  setMantra(level) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (level > 0.01 && !this.mantra) {
+      this.mantra = new Mantra(this.ctx, this.sfx, this.noiseBuf);
+      this.mantraNext = t + 0.05;
+    }
+    const m = this.mantra;
+    if (!m) return;
+    if (level > 0.01) this.mantraHeard = t;
+    else if (t - this.mantraHeard > 3) {
+      m.stop();
+      this.mantra = null;
+      return;
+    }
+    m.out.gain.setTargetAtTime(level * 0.25, t, 0.35);
+    if (this.mantraNext < t) this.mantraNext = t + 0.05; // after a pause (a hidden tab), not in the past
+    while (this.mantraNext < t + 0.5) this.mantraNext = m.say(this.mantraNext);
   }
   // The dog. `level` (0…1) is how loud it is where you are.
   // A woof: a buzzy voice that jumps up and falls away through a mouth-shaped

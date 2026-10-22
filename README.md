@@ -116,6 +116,18 @@ ground up there is shaped for them: one terrace for both stations, the knoll,
 the ridge path and the shoulder out to the pods. `?labels` shows each one's
 number, as in the photos they were placed from.
 
+The prayer wheels (转经轮) are the real thing: three racks of seven gilded
+wheels, each turning on its own axle. Walk past them on foot, close alongside,
+and your hand reaches out and brushes each wheel you pass, setting it turning
+as fast as you walk by; it slows to a stop over about nine seconds. It's your
+right hand if they're on your right, as they are going round them clockwise,
+and your left if not. Stand beside one and press **E** to give it a push, your
+hand sweeping across its face. They always turn clockwise, as prayer wheels
+are turned. While they turn you hear the six-syllable mantra they carry, **Om
+Mani Padme Hum**, chanted low by a few voices in unison, louder the more of
+them turn and the nearer you are, fading as they slow. On a touch screen the
+button says **Turn**.
+
 Up at the top lives **Mantou** (馒头), the resort's Old English Sheepdog, on
 the snow a few metres off to the side of where you start. On its own it
 potters about its spot: looks round, sniffs the snow, shakes it off its coat.
@@ -221,7 +233,7 @@ with `npm run fetch-data -- diorama`.
 | W (↑) | tuck; push along on the flat |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
-| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup or the Jetson ONE, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it |
+| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup or the Jetson ONE, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it; turn a prayer wheel beside it |
 | Q | throw a snowball for the dog |
 | In the hot spring | A / D look around, E get out |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
@@ -322,6 +334,20 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   the pose blends from standing to sitting. In the Jetson the same pose puts the
   hips on its cushion, the legs down the footwell under the nose and the hands on
   the sticks' handles, which follow the sticks as they lean.
+
+- `src/world/summit.js` builds the summit's landmarks; the prayer wheels' rack
+  (`public/models/prayer-wheels/`) is shown 5.5 times its size, which puts the
+  wheels' middles at the walking rider's shoulders and the eaves just over her
+  head, and each wheel is re-centred on its axle as it loads.
+  `src/world/prayer-wheels.js` turns them: which wheel a hand can reach and
+  where on its face, each wheel's spin slowing by a share of its speed and a
+  little more, and how loud that makes the mantra where you are. `main.js` puts
+  the hand on them, by two-bone IK as for petting the dog, either hand.
+  `src/mantra.js` chants the mantra in code, like the rest of the sound: four
+  voices in unison (one an octave under) with harmonics falling away as the
+  vocal folds' do, through four mouth resonances side by side that glide from
+  sound to sound, a nasal one for the m's and n's, and breath for the h and the
+  p's release, with a short reverb.
 
 - `src/world/onsen.js` builds the hot spring from two Tripo models
   (`public/models/onsen/`): the ring of boulders and the cave rock. It draws the

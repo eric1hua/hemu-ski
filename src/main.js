@@ -7,6 +7,8 @@ import { createLifts, createPisteMarkers, createBanner, createServiceCentre, gon
 import { createSky, SKY } from './world/sky.js';
 import { createOnsen, PUFF_COVER } from './world/onsen.js';
 import { shapeSummit, createSummit, cabinSpace } from './world/summit.js';
+import { SUMMIT } from './world/summit-layout.js';
+import { PrayerWheels } from './world/prayer-wheels.js';
 import { Dog, DOG } from './dog/dog.js';
 import { THROW } from './player/throw.js';
 import { InkPost } from './render/post.js';
@@ -289,6 +291,7 @@ function act(code, repeat = false) {
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearCar) getIn(nearCar);
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearPool) soak();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearDog) petDog();
+  else if (code === 'KeyE' && !repeat && state === 'ride' && nearWheel) turnWheel(nearWheel);
   else if (code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
   else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
   if ((code === 'Enter' || code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
@@ -884,6 +887,7 @@ function frame() {
   }
   onsen.update(dt, time, state === 'soak' && (!goingIn || goingIn.wet) ? rider.root.position : null);
   updateDog(dt);
+  updateWheels(dt);
   // The spout pouring into the pool, heard from 30 m off.
   const { fall } = onsen;
   sound.setWater(fall ? 1 - THREE.MathUtils.smoothstep(Math.hypot(phys.pos.x - fall.x, phys.pos.z - fall.z), 3, 30) : 0);
@@ -914,7 +918,8 @@ function touchLayout() {
     const act = nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
       : nearPool ? { label: 'Soak', icon: 'in', lit: true }
         : nearDog ? { label: 'Pet', icon: 'paw', lit: true }
-          : boardable ? { label: 'Ride up', icon: 'lift', lit: true } : null;
+          : nearWheel ? { label: 'Turn', icon: 'wheel', lit: true }
+            : boardable ? { label: 'Ride up', icon: 'lift', lit: true } : null;
     touch.layout({
       layout: walking ? 'walk' : 'board',
       big: walking ? 'board' : 'ollie',
@@ -966,12 +971,13 @@ function respawnInPlace() {
 }
 
 // ---------- Lifts ----------
-let boardable = null, atHall = null, nearCar = null, nearPool = false, nearDog = false, dogAround = false;
+let boardable = null, atHall = null, nearCar = null, nearPool = false, nearDog = false, dogAround = false, nearWheel = null;
 function updateBoarding() {
   boardable = null;
   nearCar = null;
   nearPool = false;
   nearDog = dogAround = false;
+  nearWheel = null;
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = 2.5;
     for (const v of vehicles) {
@@ -982,6 +988,8 @@ function updateBoarding() {
     if (nearPool) rider.preloadOutfit(SOAK_OUTFIT); // ready by the time you get in
     nearDog = !nearCar && !nearPool && phys.speed < 3 && dog.canPet(phys.pos);
     dogAround = phys.speed < 3 && dog.canFetch(phys.pos) && phys.pos.distanceTo(dog.pos) < 15; // near enough to throw for, even right by it
+    // Standing by a prayer wheel (walking past, the hand turns them anyway).
+    if (!nearCar && !nearPool && !nearDog && rider.locomotion === 'walk' && phys.speed < 0.5 && turnT <= 0) nearWheel = wheels.near(phys.pos, phys.forward(_face));
   }
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = Infinity;
@@ -996,6 +1004,7 @@ function updateBoarding() {
   if (nearCar) hud.prompt(nearCar.prompt, nearCar.touch.prompt, pressE);
   else if (nearPool) hud.prompt('<kbd>E</kbd> soak in the <b>hot spring</b>', 'Soak in the <b>hot spring</b> ▸', pressE);
   else if (nearDog) hud.prompt(`<kbd>E</kbd> pet <b>${DOG.en}</b> · <kbd>Q</kbd> throw a snowball`, `Pet <b>${DOG.en}</b> ▸`, pressE);
+  else if (nearWheel) hud.prompt('<kbd>E</kbd> turn the <b>prayer wheel</b>', 'Turn the <b>prayer wheel</b> ▸', pressE);
   else if (boardable) {
     const where = hall ? `${hall.en} · ` : '';
     const up = `<b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`;
@@ -1145,12 +1154,61 @@ function updateDog(dt) {
   if (!petted) petT = 0;
   else if (close) petT = Math.max(0, petT - dt);
   rider.reach = petT > 0 && close && state === 'ride' ? dog.headTop(_reach) : null;
+  if (rider.reach) rider.reachLeft = false;
 }
 const _reach = new THREE.Vector3(), _hand = new THREE.Vector3();
 function petDog() {
   dog.pet(forDog());
   petT = 2.2;
 }
+// ---------- The prayer wheels ----------
+// Three racks of seven on the path from 6号's top out to the ovoo (see
+// world/prayer-wheels.js). Walking past them on foot, the hand on their side
+// reaches out and brushes each wheel it passes, setting it turning as fast as
+// you go by; standing beside one, E gives it a push, the hand sweeping across
+// its face the way it turns. While they turn, the mantra is heard.
+const wheels = new PrayerWheels(SUMMIT.objects.filter((o) => o.kind === 'prayerWheels').map((o) => summit.byId.get(o.id)));
+const TURN = 0.9; // s a push with E takes
+let turnT = 0, turning = null, pushed = false; // the push: s left of it, the wheel, and whether it's been given
+let wheelsT = -1e9; // when they were last named
+const _face = new THREE.Vector3(), _palm = new THREE.Vector3();
+function turnWheel(near) {
+  turning = near.wheel;
+  turnT = TURN;
+  pushed = false;
+}
+function updateWheels(dt) {
+  turnT = Math.max(0, turnT - dt);
+  const afoot = state === 'ride' && rider.locomotion === 'walk' && phys.grounded && phys.crashed <= 0 && rider.throwT === null;
+  const near = afoot && !rider.reach ? wheels.near(phys.pos, phys.forward(_face)) : null;
+  if (near && time - wheelsT > 60) hud.toast('转经轮 · Prayer wheels', 2000);
+  if (near) wheelsT = time;
+  if (!near || near.wheel.mesh.parent !== turning?.mesh.parent) turnT = 0; // walked off from the one being pushed
+  if (near) {
+    const yaw = near.rack.root.rotation.y;
+    const pace = phys.vel.x * Math.cos(yaw) - phys.vel.z * Math.sin(yaw); // m/s along the rack
+    let x = null, wheel = null;
+    if (turnT > 0) {
+      // Across its face the way it turns, clockwise from above: toward -x on
+      // the rack's front, +x on its back.
+      x = turning.x - near.side * 0.15 * (1 - (2 * turnT) / TURN);
+      wheel = turning;
+    } else if (Math.abs(pace) > 0.4) {
+      x = near.along + Math.sign(pace) * 0.2; // a little ahead of you
+      wheel = wheels.wheelAt(near, x);
+    }
+    if (wheel) {
+      rider.reach = wheels.handAt(near, x, _palm);
+      rider.reachLeft = near.left;
+      // Once the hand's there: a brush turns it as fast as its face goes by
+      // the hand; a push, one good shove.
+      if (rider.reachW > 0.6 && turnT > 0 && !pushed) { wheels.push(wheel, { add: 6 }); pushed = true; }
+      else if (rider.reachW > 0.6 && turnT <= 0) wheels.push(wheel, { rate: Math.abs(pace) / wheel.r });
+    }
+  }
+  sound.setMantra(wheels.update(dt, phys.pos));
+}
+
 // A snowball, thrown overarm the way the camera looks (see throw.js): it
 // leaves the hand at THROW.release, and the dog is off at the wind-up.
 const throwDir = new THREE.Vector3();
@@ -1732,5 +1790,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

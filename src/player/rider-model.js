@@ -216,7 +216,7 @@ export class RiderModel {
       this.mixer.update(dt);
       this.#copyAnimated();
       if (rider.throwT != null) this.#throw(rider.throwT);
-      else if (rider.reachW > 0) this.#reach(rider.reachAt, rider.reachW);
+      else if (rider.reachW > 0) this.#reach(rider.reachAt, rider.reachW, rider.reachLeft ? 'Left' : 'Right');
     } else {
       // Clips animate all 65 bones; restore all of them before procedural posing.
       for (const { bone, p, q, s } of this.rest) {
@@ -451,14 +451,15 @@ export class RiderModel {
     f.bone.updateMatrixWorld(true);
   }
 
-  // On foot, bending down to a world point and reaching the right hand out to
-  // it (petting the dog), the clip's pose giving way to it by `w` (0–1).
-  #reach(point, w) {
-    const names = ['Spine', 'Spine1', 'RightArm', 'RightForeArm'];
+  // On foot, bending down to a world point and reaching a hand (`side`,
+  // 'Right' or 'Left') out to it (petting the dog, turning a prayer wheel), the
+  // clip's pose giving way to it by `w` (0–1).
+  #reach(point, w, side) {
+    const names = ['Spine', 'Spine1', `${side}Arm`, `${side}ForeArm`];
     const from = names.map((n) => this.bones[n].bone.quaternion.clone());
     this.root.updateMatrixWorld(true);
     const target = this.root.worldToLocal(_w.copy(point));
-    const sh = this.#modelPos('RightArm', new THREE.Vector3());
+    const sh = this.#modelPos(`${side}Arm`, new THREE.Vector3());
     // The lower it is, the further the back bends (about the hips' sideways axis).
     const fold = THREE.MathUtils.clamp((sh.y - target.y) / (this.upperArm + this.foreArm) * 0.55, 0, 0.75);
     const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
@@ -470,7 +471,7 @@ export class RiderModel {
       b.quaternion.copy(parentQ.invert().multiply(d).multiply(b.getWorldQuaternion(_r)));
       b.updateMatrixWorld(true);
     }
-    this.#armTo('Right', -1, target);
+    this.#armTo(side, side === 'Left' ? 1 : -1, target);
     names.forEach((n, i) => this.bones[n].bone.quaternion.slerpQuaternions(from[i], this.bones[n].bone.quaternion.clone(), w));
   }
 

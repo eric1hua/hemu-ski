@@ -94,7 +94,7 @@ const toon = (color, rim = 0) => makeToon({ color }, { rim });
 const M = {
   felt: toon('#f2eee4'), feltRoof: toon('#e6dfd0'), band: toon('#a8432f'), door: toon('#c4572f'), crown: toon('#7d5a3c'),
   timber: toon('#c98a3e'), board: toon('#efe3c8'),
-  red: toon('#b7362b'), redRoof: toon('#8a2c25'), gold: toon('#d8a73e', 1),
+  gold: toon('#d8a73e', 1),
   stone: toon('#9d978c'), stoneDark: toon('#7d786f'), pole: toon('#6b5136'),
   logs: toon('#b98b5d'), hutRoof: toon('#6c5a48'),
   frame: toon('#7b5230'),
@@ -180,18 +180,63 @@ function signpost() {
   return done(g, [{ x: 0, z: 0, hw: 0.25, hd: 0.25, top: H + 1 }, ...legs], H + 1);
 }
 
-// 3: one set of prayer wheels: seven gilded wheels on a red timber rack under a
-// shallow pitched roof, its long side along x, the walkway in front.
+// 3: one set of prayer wheels (public/models/prayer-wheels/), a Tripo rack a
+// unit long, shown WHEELS.scale times its size: 5.5, which puts its seven
+// gilded wheels (0.5 m across, 0.89 m tall) from 0.75 m to 1.64 m, their
+// middles level with the walking rider's shoulders (1.2 m), and the eaves of
+// its shallow roof at 1.89 m, just over her head (1.84 m); any smaller and her
+// head would go through them. Its long side is along x and it has no back:
+// the wheels turn from either side. `userData.wheels` lists them, once
+// loaded, for world/prayer-wheels.js to turn: each mesh, where its axle is
+// along the rack (m) and its radius. The numbers below are in model units,
+// measured off the model.
+const WHEELS = { scale: 5.5, posts: 0.448, depth: 0.027, top: 0.526 };
+let wheelsModel = null;
+function loadWheels() {
+  wheelsModel ??= new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/prayer-wheels/prayer-wheels.glb`).then((gltf) => {
+    const model = gltf.scene;
+    const toonOf = new Map(); // the wheels gilded, with a rim of light
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      const wheel = /^wheel_/.test(o.name);
+      // Each wheel's mesh sits a little off its node: centre it, so it turns
+      // on its own axle.
+      if (wheel) {
+        o.geometry.computeBoundingBox();
+        const c = o.geometry.boundingBox.getCenter(new THREE.Vector3());
+        o.geometry.translate(-c.x, 0, -c.z);
+        o.geometry.computeBoundingBox();
+        o.position.x += c.x;
+        o.position.z += c.z;
+      }
+      const key = `${o.material.uuid}${wheel}`;
+      if (!toonOf.has(key)) toonOf.set(key, makeToon({ map: o.material.map, color: 0xffffff, side: o.material.side }, { rim: wheel ? 1 : 0 }));
+      o.material = toonOf.get(key);
+      o.castShadow = o.receiveShadow = true;
+    });
+    return model;
+  });
+  return wheelsModel;
+}
 function prayerWheels() {
-  const g = new THREE.Group(), L = 4.4, D = 1.1;
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(g, box(0.16, 2.5, 0.16), M.red, sx * (L / 2 - 0.1), 1.25, (sz * D) / 2);
-  for (const y of [0.78, 1.72]) add(g, box(L, 0.1, 0.12), M.red, 0, y, 0);
-  for (const sx of [-1, 1]) add(g, box(0.12, 0.12, D), M.red, sx * (L / 2 - 0.1), 2.42, 0);
-  const wheel = new THREE.CylinderGeometry(0.23, 0.23, 0.82, 14);
-  for (let i = 0; i < 7; i++) add(g, wheel, M.gold, -1.8 + i * 0.6, 1.25, 0);
-  for (const s of [-1, 1]) add(g, box(L + 0.6, 0.1, 0.85), M.redRoof, 0, 2.63, s * 0.4).rotation.x = s * 0.3;
-  add(g, box(L + 0.6, 0.12, 0.12), M.redRoof, 0, 2.76, 0);
-  return done(g, [{ x: 0, z: 0, hw: L / 2, hd: D / 2 + 0.1, top: 2.8 }], 2.8);
+  const g = new THREE.Group(), S = WHEELS.scale;
+  g.userData.wheels = [];
+  g.userData.ready = loadWheels().then((model) => {
+    const rack = model.clone();
+    rack.scale.setScalar(S);
+    rack.traverse((o) => {
+      if (!/^wheel_/.test(o.name)) return;
+      const bb = o.geometry.boundingBox;
+      g.userData.wheels.push({ mesh: o, x: o.position.x * S, r: ((bb.max.x - bb.min.x + bb.max.z - bb.min.z) / 4) * S });
+    });
+    g.userData.wheels.sort((a, b) => a.x - b.x);
+    g.add(rack);
+  });
+  // One box from post to post, as deep as the posts: the wheels stand out of
+  // it a little, so a rider can come close enough to put a hand on them (the
+  // game keeps a rider half a metre off a box, and her body is narrower than
+  // that). The roof is overhead.
+  return done(g, [{ x: 0, z: 0, hw: (WHEELS.posts + 0.01) * S, hd: WHEELS.depth * S, top: WHEELS.top * S }], WHEELS.top * S);
 }
 
 // 4: the ovoo: three stone tiers stepping in, a cairn, a pole with prayer-flag

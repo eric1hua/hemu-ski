@@ -169,10 +169,13 @@ export class Rider {
     this.stance = this.feet.map((f) => f.position.clone()); // the feet on the board
     this.seat = null; // on a vehicle: see setLocomotion
     // A world point the right hand reaches out to (petting the dog), or null,
-    // and how far into reaching it is (0–1), easing in and out.
+    // and how far into reaching it is (0–1), easing in and out. On foot,
+    // `reachLeft` reaches with the left hand instead (turning a prayer wheel
+    // on your left).
     this.reach = null;
     this.reachW = 0;
     this.reachAt = new THREE.Vector3();
+    this.reachLeft = false;
     this.throwT = null; // s into throwing something overarm (see throw.js), or null
 
     this.pose = { crouch: 0.4, lean: 0, twist: 0, armSwing: 0, air: 0, tumble: 0 };
