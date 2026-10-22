@@ -1,0 +1,211 @@
+{
+  "version": "v01",
+  "scope": "planning only; no runtime or terrain changes",
+  "sourcePageId": "page:ApwypO47DueJozzQFxZIw",
+  "sourcePins": "reference-pins-v01.json",
+  "coordinateWarning": "diagramUV comes from an oblique photo, not a metric top-down reconstruction. Do not multiply by station distance and ship as final world coordinates.",
+  "diagramAxes": {
+    "origin": "Gondola 6 upper terminal",
+    "u": "toward Gondola 7 upper terminal; separation = 1",
+    "v": "perpendicular in aerial image toward objects 5 and 7; NOT a verified world north"
+  },
+  "anchors": [
+    {
+      "name": "6号索道",
+      "liftId": 1127891899,
+      "topXZ": [
+        328.8,
+        -397.5
+      ],
+      "rawTerrainHeight": 2755.54,
+      "status": "current saved game data; re-read before implementing"
+    },
+    {
+      "name": "7号索道",
+      "liftId": 1127891930,
+      "topXZ": [
+        370.8,
+        -409.4
+      ],
+      "rawTerrainHeight": 2754.16,
+      "status": "current saved game data; re-read before implementing"
+    }
+  ],
+  "currentStationSeparationMeters": 43.653,
+  "objects": [
+    {
+      "id": "summit:object-1",
+      "sourceLabel": "object 1",
+      "name": "圆顶帐篷",
+      "diagramUV": [
+        0.751,
+        0.395
+      ],
+      "positionStatus": "aerial image-plane projection; NOT surveyed plan coordinates",
+      "placeholder": "cylinder + cone",
+      "suggestedSizeMeters": [
+        6,
+        6,
+        4
+      ],
+      "sizeStatus": "adjustable blockout assumption, not measured",
+      "worldPosition": null,
+      "yawRadians": null,
+      "yawStatus": "fit using both photos; not recovered",
+      "modelUrl": null
+    },
+    {
+      "id": "summit:object-2",
+      "sourceLabel": "object 2",
+      "name": "金色雕塑",
+      "diagramUV": [
+        0.352,
+        0.019
+      ],
+      "positionStatus": "aerial image-plane projection; NOT surveyed plan coordinates",
+      "placeholder": "3 poles + small cap",
+      "suggestedSizeMeters": [
+        4,
+        4,
+        5
+      ],
+      "sizeStatus": "adjustable blockout assumption, not measured",
+      "worldPosition": null,
+      "yawRadians": null,
+      "yawStatus": "fit using both photos; not recovered",
+      "modelUrl": null
+    },
+    {
+      "id": "summit:object-3",
+      "sourceLabel": "object 3",
+      "name": "低矮棚亭",
+      "diagramUV": [
+        -0.374,
+        0.129
+      ],
+      "positionStatus": "aerial image-plane projection; NOT surveyed plan coordinates",
+      "placeholder": "box + shallow gable",
+      "suggestedSizeMeters": [
+        7,
+        3,
+        2.8
+      ],
+      "sizeStatus": "adjustable blockout assumption, not measured",
+      "worldPosition": null,
+      "yawRadians": null,
+      "yawStatus": "fit using both photos; not recovered",
+      "modelUrl": null
+    },
+    {
+      "id": "summit:object-4",
+      "sourceLabel": "object 4",
+      "name": "圆形装置 / 观景点",
+      "diagramUV": [
+        -0.972,
+        -0.015
+      ],
+      "positionStatus": "aerial image-plane projection; NOT surveyed plan coordinates",
+      "placeholder": "2 cylinders / rings",
+      "suggestedSizeMeters": [
+        9,
+        9,
+        2.5
+      ],
+      "sizeStatus": "adjustable blockout assumption, not measured",
+      "worldPosition": null,
+      "yawRadians": null,
+      "yawStatus": "fit using both photos; not recovered",
+      "modelUrl": null
+    },
+    {
+      "id": "summit:object-5",
+      "sourceLabel": "object 5",
+      "name": "木屋",
+      "diagramUV": [
+        0.026,
+        0.267
+      ],
+      "positionStatus": "aerial image-plane projection; NOT surveyed plan coordinates",
+      "placeholder": "box + gable",
+      "suggestedSizeMeters": [
+        6,
+        5,
+        5
+      ],
+      "sizeStatus": "adjustable blockout assumption, not measured",
+      "worldPosition": null,
+      "yawRadians": null,
+      "yawStatus": "fit using both photos; not recovered",
+      "modelUrl": null
+    },
+    {
+      "id": "summit:object-6",
+      "sourceLabel": "object 6",
+      "name": "崖边木框",
+      "diagramUV": [
+        0.43,
+        0.42
+      ],
+      "positionStatus": "single-view hypothesis; verify before placement",
+      "placeholder": "2 poles + crossbar",
+      "suggestedSizeMeters": [
+        4,
+        0.6,
+        3.5
+      ],
+      "sizeStatus": "adjustable blockout assumption, not measured",
+      "worldPosition": null,
+      "yawRadians": null,
+      "yawStatus": "fit using both photos; not recovered",
+      "modelUrl": null
+    },
+    {
+      "id": "summit:object-7",
+      "sourceLabel": "object 7",
+      "name": "坡边建筑",
+      "diagramUV": [
+        0.148,
+        0.561
+      ],
+      "positionStatus": "aerial image-plane projection; NOT surveyed plan coordinates",
+      "placeholder": "box + gable",
+      "suggestedSizeMeters": [
+        8,
+        6,
+        5
+      ],
+      "sizeStatus": "adjustable blockout assumption, not measured",
+      "worldPosition": null,
+      "yawRadians": null,
+      "yawStatus": "fit using both photos; not recovered",
+      "modelUrl": null
+    }
+  ],
+  "unNumberedLandmark": {
+    "name": "tall communications mast near object 5",
+    "countedInSevenObjects": false,
+    "instruction": "retain as orientation cue; optional thin pole helper only"
+  },
+  "terrainZones": [
+    {
+      "id": "A",
+      "name": "connected station circulation terrace",
+      "rule": "continuous walkable snow, local pads; no single giant flat slab"
+    },
+    {
+      "id": "B",
+      "name": "rounded snow knoll at object 1",
+      "rule": "preserve rounded rise and route around it; crest height requires calibration"
+    },
+    {
+      "id": "C",
+      "name": "ridge extension toward object 4",
+      "rule": "narrow gently connected ridge path; height unknown"
+    },
+    {
+      "id": "D",
+      "name": "cliff-side slope and shoulder toward object 7",
+      "rule": "retain steep outer face and traversable inner shoulder; drop unknown"
+    }
+  ]
+}

@@ -20,16 +20,27 @@ float tNoise(vec2 p) {
 }
 `;
 
+// `piste` (with `snow`): the geometry has an aPiste attribute (across the run,
+// along it, how groomed: see world/terrain.js), and groomed snow gets corduroy.
 export function makeToon(params = {}, opts = {}) {
-  const { hatch = 1, rim = 0, snow = 0 } = opts;
+  const { hatch = 1, rim = 0, snow = 0, piste = 0 } = opts;
   const mat = new THREE.MeshLambertMaterial(params);
+  if (piste) mat.defines = { ...mat.defines, TOON_PISTE: '' };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, toonUniforms);
     shader.uniforms.uHatch = { value: hatch };
     shader.uniforms.uRim = { value: rim };
     shader.uniforms.uSnow = { value: snow };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vTWorld;')
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vTWorld;
+        #ifdef TOON_PISTE
+          attribute vec3 aPiste;
+          varying vec3 vPiste;
+        #endif`,
+      )
       .replace(
         '#include <project_vertex>',
         `#include <project_vertex>
@@ -39,6 +50,9 @@ export function makeToon(params = {}, opts = {}) {
             tw = instanceMatrix * tw;
           #endif
           vTWorld = (modelMatrix * tw).xyz;
+          #ifdef TOON_PISTE
+            vPiste = aPiste;
+          #endif
         }`,
       );
     shader.fragmentShader = shader.fragmentShader
@@ -53,6 +67,9 @@ export function makeToon(params = {}, opts = {}) {
         uniform float uHatch;
         uniform float uRim;
         uniform float uSnow;
+        #ifdef TOON_PISTE
+          varying vec3 vPiste;
+        #endif
         ${NOISE_GLSL}`,
       )
       .replace(
@@ -69,7 +86,27 @@ export function makeToon(params = {}, opts = {}) {
             vec2 sw = vec2(w.x * 0.9 + w.y * 0.4, w.y * 0.25 - w.x * 0.1);
             float stroke = smoothstep(0.66, 0.7, tNoise(sw * 1.3)) * smoothstep(0.35, 0.6, tNoise(w * 0.07 + 7.0));
             float fleck = step(0.985, tHash(floor(w * 2.2)));
-            base *= 1.0 - (stroke * 0.07 + fleck * 0.06) * near;
+            float groomed = 0.0;
+            #ifdef TOON_PISTE
+            {
+              // Corduroy: the groomer's ribs along the run, in lanes a tiller
+              // wide with a seam between them, scuffed away in patches, and a
+              // ragged edge where the grooming stops. Each fades out before
+              // it's too fine to draw.
+              float along = vPiste.y;
+              float o = vPiste.x + (tNoise(vec2(along * 0.008, 1.7)) - 0.5) * 1.2; // the groomer wanders
+              float m = smoothstep(0.35, 0.65, vPiste.z + (tNoise(vec2(along * 0.25, o * 0.6)) - 0.5) * 0.35);
+              float rib = o / 0.18;
+              float ribs = (0.5 + 0.5 * cos(rib * 6.2831853)) * (1.0 - smoothstep(0.3, 0.7, fwidth(rib)));
+              float lane = o / 4.4;
+              float seamD = min(fract(lane), 1.0 - fract(lane)) * 4.4;
+              float seam = (1.0 - smoothstep(0.04, 0.16, seamD)) * (1.0 - smoothstep(0.08, 0.3, fwidth(o)));
+              float worn = smoothstep(0.45, 0.8, tNoise(vec2(along * 0.035, o * 0.12) + floor(lane) * 1.31));
+              base *= 1.0 - m * (ribs * 0.1 * (1.0 - worn * 0.85) + seam * 0.09);
+              groomed = m;
+            }
+            #endif
+            base *= 1.0 - (stroke * 0.07 + fleck * 0.06) * near * (1.0 - groomed);
           }
           float lum = max(dot(base, vec3(0.299, 0.587, 0.114)), 1e-4);
           float direct = dot(reflectedLight.directDiffuse, vec3(0.299, 0.587, 0.114)) / lum;
@@ -99,6 +136,6 @@ export function makeToon(params = {}, opts = {}) {
       );
   };
   // Distinct program cache key per option combination.
-  mat.customProgramCacheKey = () => `toon-${hatch}-${rim}-${snow}`;
+  mat.customProgramCacheKey = () => `toon-${hatch}-${rim}-${snow}-${piste}`;
   return mat;
 }

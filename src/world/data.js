@@ -1,5 +1,7 @@
 // Loads the baked world (see tools/terrain/fetch-data.mjs) and provides sampling helpers.
 import * as THREE from 'three';
+import { liftStations } from './stations.js';
+import { SUMMIT, SUMMIT_IDS, summitObject } from './summit-layout.js';
 
 const BASE = import.meta.env.BASE_URL + 'data/';
 
@@ -29,7 +31,8 @@ async function loadEdits(base) {
 }
 
 // `dir` picks a sub-folder of public/data (e.g. 'diorama/'); the backdrop is optional.
-// With `edits`, the map editor's saved heights, holes and runs replace the bake's.
+// With `edits`, the map editor's saved heights, holes, runs and lifts replace the
+// bake's, and the places it moved (see Places, below) go where it put them.
 export async function loadWorld(dir = '', { edits: useEdits = false } = {}) {
   const base = BASE + dir;
   const meta = await (await fetch(base + 'world.json')).json();
@@ -39,13 +42,19 @@ export async function loadWorld(dir = '', { edits: useEdits = false } = {}) {
     [detailMeta, meta.backdrop].map((f) => f && fetch(base + f.file, { cache: edits ? 'no-store' : 'default' }).then((r) => r.arrayBuffer())),
   );
   const detail = new Heightfield(detailMeta.size, detailMeta.cells, decode(d, detailMeta), detailMeta.center);
+  // The bake's runs and lifts, before the edits replace them (the editor puts things back from these).
+  const baked = { runs: meta.runs, lifts: meta.lifts };
   if (edits) {
     meta.runs = edits.runs;
+    if (edits.lifts) meta.lifts = edits.lifts;
     detail.setHoles(edits.tileCells, edits.holes);
+    applyPlaces(edits.places);
   }
+  setSummitFrame(meta.lifts);
   return {
     meta,
     edits,
+    baked,
     detail,
     backdrop: b && new Heightfield(meta.backdrop.size, meta.backdrop.cells, decode(b, meta.backdrop)),
   };
@@ -124,6 +133,7 @@ export class Heightfield {
 
 // Distance (m) from every point to the nearest piste centreline, rasterised on a
 // grid. Used for snow coloring, tree clearing, friction and the HUD run name.
+// It also keeps which stretch of that run is nearest, for coordsAt().
 export class PisteField {
   constructor(runs, size, cell = 4, maxDist = 60, center = [0, 0]) {
     this.size = size;
@@ -135,12 +145,19 @@ export class PisteField {
     this.maxDist = maxDist;
     this.dist = new Float32Array(this.n * this.n).fill(maxDist);
     this.run = new Int16Array(this.n * this.n).fill(-1);
+    this.seg = new Uint16Array(this.n * this.n);
+    // Each run's points and the distance down it to each of them.
+    this.lines = runs.map(({ points: p }) => {
+      const cum = new Float32Array(p.length);
+      for (let s = 1; s < p.length; s++) cum[s] = cum[s - 1] + Math.hypot(p[s][0] - p[s - 1][0], p[s][1] - p[s - 1][1]);
+      return { p, cum };
+    });
     runs.forEach((run, ri) => {
       const p = run.points;
-      for (let s = 0; s < p.length - 1; s++) this.#raster(p[s], p[s + 1], ri);
+      for (let s = 0; s < p.length - 1; s++) this.#raster(p[s], p[s + 1], ri, s);
     });
   }
-  #raster(a, b, ri) {
+  #raster(a, b, ri, s) {
     const { cell, n, maxDist } = this;
     const x0 = Math.min(a[0], b[0]) - maxDist - this.x0, x1 = Math.max(a[0], b[0]) + maxDist - this.x0;
     const z0 = Math.min(a[1], b[1]) - maxDist - this.z0, z1 = Math.max(a[1], b[1]) + maxDist - this.z0;
@@ -157,7 +174,7 @@ export class PisteField {
         const ex = a[0] + dx * t - x, ez = a[1] + dz * t - z;
         const d = Math.sqrt(ex * ex + ez * ez);
         const k = j * n + i;
-        if (d < this.dist[k]) { this.dist[k] = d; this.run[k] = ri; }
+        if (d < this.dist[k]) { this.dist[k] = d; this.run[k] = ri; this.seg[k] = s; }
       }
     }
   }
@@ -175,6 +192,31 @@ export class PisteField {
     const i = Math.round((x - this.x0) / cell), j = Math.round((z - this.z0) / cell);
     if (i < 0 || j < 0 || i >= n || j >= n) return -1;
     return this.run[j * n + i];
+  }
+  // Where (x, z) lies on its nearest run: `along` it from its top and `off` to
+  // the side of its line (signed: + on the right going down), in metres, and
+  // which run (`run`, -1 when none is within maxDist).
+  coordsAt(x, z, out = {}) {
+    const { cell, n } = this;
+    const i = Math.round((x - this.x0) / cell), j = Math.round((z - this.z0) / cell);
+    const k = j * n + i;
+    out.run = i < 0 || j < 0 || i >= n || j >= n ? -1 : this.run[k];
+    if (out.run < 0) return out;
+    // The grid's stretch is the nearest at the cell's centre; check its neighbours too.
+    const { p, cum } = this.lines[out.run];
+    let best = Infinity;
+    for (let s = Math.max(0, this.seg[k] - 1); s <= Math.min(p.length - 2, this.seg[k] + 1); s++) {
+      const a = p[s], b = p[s + 1];
+      const dx = b[0] - a[0], dz = b[1] - a[1], len2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / len2));
+      const ex = x - a[0] - dx * t, ez = z - a[1] - dz * t, d = Math.hypot(ex, ez);
+      if (d < best) {
+        best = d;
+        out.along = cum[s] + t * Math.sqrt(len2);
+        out.off = dx * ez - dz * ex < 0 ? -d : d;
+      }
+    }
+    return out;
   }
 }
 
@@ -194,3 +236,77 @@ export const SERVICE_CENTRES = [
 // the East Service Centre on nearly level ground, the gap in its rocks facing
 // the hall. `clearing` keeps trees off it.
 export const ONSEN = { zh: '温泉', en: 'Hot spring', x: 638, z: 4536, faceTo: [710, 4410], clearing: 10 };
+
+// Where the vehicles park, nose out from the East Service Centre: `along` its
+// front from the middle and `out` from it, in metres.
+const PARKING = { pickup: [-16, 33], snowmobile: [28, 31], jetson: [4, 52] };
+
+// ---------- The summit ----------
+// The landmarks round the top of Gondolas No. 6 and 7 (see summit-layout.js)
+// are laid out from the point midway between their two top stations: the ends
+// of the two lifts that lie nearest each other, where liftStations() puts them.
+export function summitFrame(lifts) {
+  const at = liftStations(lifts);
+  const ends = SUMMIT.stations.map((id) => {
+    const li = lifts.findIndex((l) => String(l.id) === String(id));
+    return li >= 0 && at[li];
+  });
+  if (!ends[0] || !ends[1]) return null;
+  let best = null;
+  for (const a of ends[0])
+    for (const b of ends[1]) {
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (!best || d < best.d) best = { d, a, b };
+    }
+  const { a, b } = best;
+  return { origin: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], stations: [a, b] };
+}
+let summitOrigin = SUMMIT.origin;
+// Lays the summit out from these lifts' stations (loadWorld does, and the map
+// editor again when it moves them).
+export function setSummitFrame(lifts) {
+  summitOrigin = summitFrame(lifts)?.origin ?? SUMMIT.origin;
+}
+
+// ---------- Places ----------
+// The things on the map that the editor can move, by id: the service centres
+// (`lodge:east`, `lodge:west`), the hot spring (`onsen`), the parked vehicles
+// (`vehicle:pickup`, ...) and the summit's landmarks (`summit:object-1`, ...).
+// Each stands at { x, z, yaw }, yaw 0 facing +z as the models are built. The
+// editor saves the ones it moved as `places` in its edits, and applyPlaces()
+// puts them there; the rest stay where they're set above, the vehicles in front
+// of the East Service Centre wherever it went, the summit's where its layout
+// puts them round the stations.
+const BUILT = [...SERVICE_CENTRES.map((c) => [`lodge:${c.id}`, c]), ['onsen', ONSEN]];
+const AS_BUILT = new Map(BUILT.map(([id, c]) => [id, { x: c.x, z: c.z, faceTo: [...c.faceTo] }]));
+export const PLACE_IDS = [...BUILT.map(([id]) => id), ...Object.keys(PARKING).map((n) => `vehicle:${n}`), ...SUMMIT_IDS];
+let moved = {};
+
+export function placeOf(id) {
+  if (moved[id]) return { ...moved[id] };
+  const [kind, name] = id.split(':');
+  if (kind === 'summit') {
+    const { at, yaw } = summitObject(id);
+    return { x: summitOrigin[0] + at[0], z: summitOrigin[1] + at[1], yaw };
+  }
+  if (kind === 'vehicle') {
+    const { x, z, yaw } = placeOf('lodge:east'), [along, out] = PARKING[name];
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+    return { x: x + along * cos + out * sin, z: z - along * sin + out * cos, yaw };
+  }
+  const { x, z, faceTo } = AS_BUILT.get(id);
+  return { x, z, yaw: Math.atan2(faceTo[0] - x, faceTo[1] - z) };
+}
+
+// `places`: id → { x, z, yaw } for the ones that moved. SERVICE_CENTRES and
+// ONSEN change in place, so everything that reads them follows; their faceTo
+// turns with them and keeps its distance.
+export function applyPlaces(places = {}) {
+  moved = Object.fromEntries(Object.entries(places).filter(([id]) => PLACE_IDS.includes(id)));
+  for (const [id, c] of BUILT) {
+    const home = AS_BUILT.get(id);
+    if (!moved[id]) { Object.assign(c, { x: home.x, z: home.z, faceTo: [...home.faceTo] }); continue; }
+    const { x, z, yaw } = moved[id], reach = Math.hypot(home.faceTo[0] - home.x, home.faceTo[1] - home.z);
+    Object.assign(c, { x, z, faceTo: [x + Math.sin(yaw) * reach, z + Math.cos(yaw) * reach] });
+  }
+}

@@ -68,11 +68,15 @@ function buildTreeGeometry(lod) {
 }
 
 // The game's forest settings, shared with the map editor so it shows the same trees.
+// The clearings are read when the forest is placed, so they follow the map
+// editor's moves (see Places in data.js).
 export const GAME_FOREST = {
   treeline: 2350,
   spacing: 10,
   density: 0.5,
-  clearings: [...SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 110 })), { x: ONSEN.x, z: ONSEN.z, r: ONSEN.clearing }],
+  get clearings() {
+    return [...SERVICE_CENTRES.map((c) => ({ x: c.x, z: c.z, r: 110 })), { x: ONSEN.x, z: ONSEN.z, r: ONSEN.clearing }];
+  },
 };
 
 // Every spot the forest would put a tree: one jittered candidate per `spacing`

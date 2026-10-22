@@ -60,15 +60,19 @@ export class RunsView {
   rebuild(ri) {
     const list = ri === undefined ? this.runs.map((_, i) => i) : [ri];
     for (const i of list) this.#drape(i);
-    if (ri === undefined)
-      for (const { lift, line } of this.liftLines) {
-        const [a, b] = [lift.points[0], lift.points[lift.points.length - 1]];
-        const pts = [a, b].flatMap(([x, z]) => [x, this.hf.heightAt(x, z) + 12, z]);
-        line.geometry.dispose();
-        line.geometry = new LineGeometry().setPositions(pts);
-        line.computeLineDistances();
-      }
+    if (ri === undefined) this.rebuildLifts();
     this.#syncHandles();
+  }
+
+  // Redraw the lifts (after the ground moved, or a station did).
+  rebuildLifts() {
+    for (const { lift, line } of this.liftLines) {
+      const [a, b] = [lift.points[0], lift.points[lift.points.length - 1]];
+      const pts = [a, b].flatMap(([x, z]) => [x, this.hf.heightAt(x, z) + 12, z]);
+      line.geometry.dispose();
+      line.geometry = new LineGeometry().setPositions(pts);
+      line.computeLineDistances();
+    }
   }
 
   #drape(ri) {
@@ -182,7 +186,7 @@ export class RunsView {
   }
 }
 
-function dotTexture() {
+export function dotTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 32;
   const g = c.getContext('2d');

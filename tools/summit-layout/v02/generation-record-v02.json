@@ -1,0 +1,21 @@
+{
+  "tool": "built-in image_gen.imagegen",
+  "authorizedCalls": 2,
+  "actualCalls": 2,
+  "billingQuote": "Tool does not expose per-call price; user explicitly permitted both calls with this limitation.",
+  "prompts": "PROMPTS-v02.md",
+  "secondCallAppendix": "STYLE PRECISION: Make flat, clearly delineated warm/cool cel-shaded color planes much more dominant than microtexture; use the exact spare, understated line language of the fourth reference. Strongly simplify wood grain, snow granules and stone microdetail. Object 8 specifically uses two straight vertical posts without diagonal A-frame legs. Keep seven prayer wheels countable in the main object-3 shelter.",
+  "outputs": [
+    {
+      "source": "/Users/erichua/.codex/generated_images/01a161e6-349b-7a82-b4fb-f96c4522207b/exec-689acd45-f89f-4b69-a8d7-9ff93ec95183.png",
+      "output": "/Users/erichua/Developer/threejs-game-dev/tools/summit-layout/v02/summit-overview-art-v02.png",
+      "sha256": "54b94abeda8420b7fc3219043e63afd622425cf99748e79e2e5d0dedad92432d"
+    },
+    {
+      "source": "/Users/erichua/.codex/generated_images/01a161e6-349b-7a82-b4fb-f96c4522207b/exec-57b544c9-5b3e-485b-b315-b3d624e336ed.png",
+      "output": "/Users/erichua/Developer/threejs-game-dev/tools/summit-layout/v02/landmark-art-sheet-v02.png",
+      "sha256": "5875632d62f82c58293338b7fb71f9096890e7d7071331e5b04df5f0c917672e"
+    }
+  ],
+  "status": "generated and visually inspected; not user-approved; not integrated into game"
+}

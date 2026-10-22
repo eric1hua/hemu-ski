@@ -1,8 +1,8 @@
 // The map being edited: the detail heightfield (changed in place), its deleted
-// tiles, the run centrelines and the changes to the forest, with undo/redo and
-// saving. The view listens
+// tiles, the run centrelines, the changes to the forest, the lifts' ends and
+// the places that moved, with undo/redo and saving. The view listens
 // through `onChange` and redraws whatever a change touched.
-import { encodeHeights, EDITS_DIR } from '../../src/world/data.js';
+import { encodeHeights, EDITS_DIR, applyPlaces } from '../../src/world/data.js';
 import { GAME_FOREST } from '../../src/world/trees.js';
 
 const smoothstep = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
@@ -15,6 +15,11 @@ export class EditMap {
     // Forest changes, as the game reads them (see applyTreeEdits in world/trees.js).
     const t = world.edits?.trees;
     this.trees = { density: t?.density ?? GAME_FOREST.density, removed: new Set(t?.removed || []), added: (t?.added || []).map((a) => [...a]) };
+    // Lifts as the game reads them, and the places that moved, id → { x, z, yaw }
+    // (see Places in world/data.js). `baked` is the map before any edits.
+    this.lifts = world.meta.lifts;
+    this.places = structuredClone(world.edits?.places || {});
+    this.baked = structuredClone(world.baked);
     this.undoStack = [];
     this.redoStack = [];
     this.dirty = false;
@@ -282,6 +287,26 @@ export class EditMap {
     this.editTrees(`Forest density ${Math.round(d * 100)}%`, (t) => (t.density = d));
   }
 
+  // ---------- Objects ----------
+  #objState() {
+    return { lifts: this.lifts.map((l) => l.points.map((p) => [...p])), places: structuredClone(this.places) };
+  }
+  #setObjects(snap) {
+    this.lifts.forEach((l, i) => (l.points = snap.lifts[i].map((p) => [...p])));
+    this.places = structuredClone(snap.places);
+    applyPlaces(this.places);
+  }
+  // One undo step for `edit(map)`; `before` is passed when the change already
+  // happened live (dragging).
+  editObjects(label, edit, before = this.#objState()) {
+    edit?.(this);
+    applyPlaces(this.places);
+    const after = this.#objState();
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    this.#push({ label, change: { objects: true }, undo: () => this.#setObjects(before), redo: () => this.#setObjects(after) });
+  }
+  objectSnapshot() { return this.#objState(); }
+
   // ---------- Saving ----------
   async save() {
     const hf = this.hf;
@@ -300,6 +325,8 @@ export class EditMap {
         removed: [...this.trees.removed].sort((a, b) => a - b),
         added: this.trees.added.map(([x, z, s]) => [Math.round(x * 10) / 10, Math.round(z * 10) / 10, Math.round(s * 100) / 100]),
       },
+      lifts: this.lifts.map((l) => ({ ...l, points: l.points.map(([x, z]) => [Math.round(x * 10) / 10, Math.round(z * 10) / 10]) })),
+      places: Object.fromEntries(Object.entries(this.places).map(([id, { x, z, yaw }]) => [id, { x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, yaw: Math.round(yaw * 1000) / 1000 }])),
     };
     // Heights first: edits.json is what tells the game to use them.
     await put('detail.u16', data.buffer);

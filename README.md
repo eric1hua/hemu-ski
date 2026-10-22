@@ -105,6 +105,17 @@ side; about 15 s, and E gets her out at any point. Getting out, she changes
 back into her ski gear. The male and classic riders have no swimsuit yet, so
 they slide in as they are.
 
+The summit round the two top stations, 6号 and 7号, has its landmarks, as
+stand-ins until their models are made: a white yurt on a snow knoll behind
+7号, the timber signpost whose arrows point to the four countries in sight,
+three sets of seven prayer wheels on the path out along the ridge to the ovoo
+and its prayer flags, a small hut at the foot of the telecoms mast, a giant
+wooden photo frame you can walk through, the coffee cabin out on the shoulder,
+a two-seat swing, and three orange dome pods further out on their own pads. The
+ground up there is shaped for them: one terrace for both stations, the knoll,
+the ridge path and the shoulder out to the pods. `?labels` shows each one's
+number, as in the photos they were placed from.
+
 Up at the top lives **Mantou** (馒头), the resort's Old English Sheepdog, on
 the snow a few metres off to the side of where you start. On its own it
 potters about its spot: looks round, sniffs the snow, shakes it off its coat.
@@ -231,7 +242,11 @@ under `npm run dev` or Node:
 - `tools/terrain/fetch-data.mjs`: bakes the real terrain, runs and lifts into
   `public/data/` (`npm run fetch-data`; see below).
 - `tools/review/`: close-up review pages for the riders
-  (`/tools/review/rider.html`) and the dog (`/tools/review/dog.html`).
+  (`/tools/review/rider.html`) and the dog (`/tools/review/dog.html`), and
+  one for the summit (`/tools/review/summit.html`): its landmarks seen from
+  cameras fitted to the four photos they were placed from, with each photo
+  laid over (from the Cowart canvas in `canvas/`, where it's there) and the
+  arrows drawn on them marked, and from straight above.
 - `tests/`: `npm test` checks the female rider's animation.
 
 The 3D models in `public/models/` are made in a separate, local-only asset lab
@@ -245,12 +260,24 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   Overpass. Re-run with `npm run fetch-data` (it caches into `.cache/`).
   The play area is off-centre (it reaches down to the service centres), but
   coordinates stay relative to Gondola No. 6.
-- The terrain is cut into tiles that are frustum-culled and drop to half
-  resolution past 1.2 km. Far forest chunks are batched 4 × 4, and lift towers
-  and cars are instanced.
+- `src/world/banks.js` banks the snow up beside the runs, as a groomer leaves
+  it: the runs keep their height and the snow either side rises 1.4–2.5 m over
+  6–10 m, then eases back to the ground's own height. Banks die away at a run's
+  loose ends and around the lift stations, halls and hot spring. The bank is
+  narrower than the bake's 8 m cells, so the game's ground is the bake
+  resampled at 4 m with the banks added; the snow is painted cool in the
+  hollow at a bank's foot and bright along its crest, which flat toon light
+  wouldn't show.
+- The terrain is cut into tiles that are frustum-culled: 4 m within 300 m of
+  the camera (built as you come near), 8 m out to 1.2 km and 16 m beyond. Far
+  forest chunks are batched 4 × 4, and lift towers and cars are instanced.
 - `src/render/toon.js` adds three flat tones, a wobbly terminator, shadow
   hatching and snow-surface strokes to `MeshLambertMaterial`, so shadows,
-  fog and instancing still work.
+  fog and instancing still work. On the runs it draws corduroy: ribs 18 cm
+  apart down the run, in groomer-wide lanes with a seam between them, worn
+  away in patches and ragged where the grooming stops. Each vertex carries
+  where it lies on its run (across and along it, from `PisteField.coordsAt`),
+  so the ribs follow the run's bends.
 - `src/render/post.js` draws ink lines from depth (silhouettes) and normals
   (creases), with jittered offsets for a hand-drawn line, plus paper grain.
 - `src/player/rider.js` builds the snowboarder from primitives after a
@@ -264,6 +291,11 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
 - `src/player/physics.js` handles slope gravity, edge grip that turns sideways
   slip back into forward speed, drag, ollies, natural take-offs on rollovers,
   tree crashes, and walls (the map edge, lift stations and service centres).
+  Off the runs the snow is powder (less on the steep, rocky faces): it drags
+  most at walking pace and less as the board planes up, and the edge holds a
+  little less. The board rides sunk in it, to just over the ankles at speed and
+  the lower calf slowing down, with snow heaped round it (`SnowCollar` in
+  `src/player/fx.js`), and leaves a furrow and a plume rather than a carved line.
 - `src/vehicle/truck.js` loads the pickup (`public/models/truck/`, one Tripo
   mesh) and splits its tyres and rims out of it by connected piece, so the
   wheels roll and the front ones steer. `src/vehicle/snowmobile.js` loads the
@@ -369,7 +401,8 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
 - Forest cover is procedural, thinned to match the resort's 2023–24 trail map:
   open snowfields up high, scattered stands below a ~2,350 m treeline, cleared
   along pistes, lift lines and around the lodges. Pistes are assumed to be
-  about 34 m wide.
+  about 34 m wide, all of them groomed, and the banks beside them are made up,
+  not measured.
 - The two service centres are placed from OpenStreetMap (East) and the trail
   map (West, beside 3号's bottom station); the buildings are stylised.
 - Lift rides are sped up to 10–22 s.

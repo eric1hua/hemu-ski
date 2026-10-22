@@ -32,6 +32,7 @@ export class BoardPhysics {
     this.airTime = 0;
     this.crashed = 0;
     this.slip = 0; // sideways skid speed, drives spray + sound
+    this.powder = 0; // how deep the snow underfoot is, 0 (groomed) to 1 (powder)
     this.jumpCharge = 0;
     this.events = [];
   }
@@ -146,23 +147,30 @@ export class BoardPhysics {
     _g.set(0, -G, 0).addScaledVector(n, G * n.y);
     this.vel.addScaledVector(_g, dt);
 
+    // The snow: groomed on the runs, powder off them (less where the wind has
+    // scoured the steep faces down to rock, the faces the terrain paints as rock).
+    const groomed = 1 - THREE.MathUtils.smoothstep(this.piste.distAt(this.pos.x, this.pos.z), PISTE_HALF_WIDTH - 1, PISTE_HALF_WIDTH + 3);
+    this.powder = (1 - groomed) * (1 - 0.7 * (1 - THREE.MathUtils.smoothstep(n.y, 0.77, 0.83)));
+
     // Edge grip: kill lateral velocity, return most of it along the board.
+    // In powder the edge holds less, so the board drifts and sprays.
     let vf = this.vel.dot(_f);
     let vs = this.vel.dot(_s);
-    const grip = input.brake ? 2.2 : 7.5;
+    const grip = (input.brake ? 2.2 : 7.5) * (1 - 0.15 * this.powder);
     const newVs = vs * Math.exp(-grip * dt);
     const removed = Math.abs(vs) - Math.abs(newVs);
     vf += Math.sign(vf || 1) * removed * (input.brake ? 0.1 : 0.8);
     this.slip = Math.abs(vs);
     this.vel.copy(_f).multiplyScalar(vf).addScaledVector(_s, newVs);
 
-    // Snow friction + air drag.
-    const onPiste = this.piste.distAt(this.pos.x, this.pos.z) < PISTE_HALF_WIDTH + 2;
-    let mu = onPiste ? 0.035 : 0.1;
+    // Snow friction + air drag. Powder holds you back most at walking pace and
+    // less as the board planes up on it, and over all about as much as before.
+    let mu = 0.035 + 0.025 * this.powder;
     if (input.brake) mu += 0.5;
     const drag = input.tuck ? 0.0022 : 0.0042;
     const sp = this.vel.length();
-    const dec = mu * G * n.y + drag * sp * sp;
+    const plough = 0.06 * this.powder * sp * (1 - 0.55 * THREE.MathUtils.smoothstep(sp, 4, 14));
+    const dec = mu * G * n.y + drag * sp * sp + plough;
     if (sp > 0) this.vel.multiplyScalar(Math.max(0, sp - dec * dt) / sp);
 
     // Skating: on the flat (or to get going), W pushes off along the nose.
@@ -261,6 +269,7 @@ export class BoardPhysics {
     if (impact > 13) return this.crash('hard landing');
     if (cos < 0.45 && this.vel.length() > 7) return this.crash('sideways landing');
     this.vel.multiplyScalar(0.96);
+    if (this.airTime > 0.25) this.events.push({ type: 'land', impact });
     if (this.airTime > 0.6) this.events.push({
       type: 'air',
       time: this.airTime,

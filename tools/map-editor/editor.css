@@ -51,6 +51,19 @@
 .ed-top { right: 18px; top: 18px; display: flex; gap: 6px; padding: 8px; }
 .ed-top #save.dirty { background: var(--accent); }
 
+.ed-label {
+  position: fixed; pointer-events: none; transform: translate(14px, -50%); white-space: nowrap;
+  font-size: 15px; background: rgba(251, 250, 245, 0.92); border: 2px solid var(--ink); padding: 0 8px;
+}
+
+.ed-legend {
+  right: 18px; top: 74px; padding: 6px 12px; display: grid; gap: 3px; font-size: 14px;
+}
+.ed-legend .sw { display: inline-block; width: 22px; height: 12px; margin-right: 8px; vertical-align: -1px; }
+.ed-legend .groomed { background: rgba(217, 83, 74, 0.3); border-right: 3px solid #d9534a; }
+.ed-legend .edge { border-right: 1.5px solid rgba(35, 48, 58, 0.7); }
+.ed-legend .trees { background: repeating-linear-gradient(-45deg, rgba(63, 107, 85, 0.35) 0 3px, transparent 3px 6px); }
+
 .ed-status {
   position: fixed; left: 18px; bottom: 14px; display: flex; gap: 18px; align-items: center;
   font-size: 15px; background: rgba(251, 250, 245, 0.9); border: 2px solid var(--ink);
@@ -64,6 +77,8 @@
 
 @media (max-width: 640px) {
   .ed-tools { width: calc(100vw - 32px); left: 16px; top: 80px; }
+  .ed-toolrow { flex-wrap: wrap; }
+  .ed-legend { left: 16px; right: auto; top: auto; bottom: 50px; }
   .ed-top { left: 16px; right: 16px; flex-wrap: wrap; }
   .ed-help { display: none; }
 }

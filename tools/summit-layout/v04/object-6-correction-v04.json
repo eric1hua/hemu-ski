@@ -1,0 +1,79 @@
+{
+  "version": "v04",
+  "sourceRevision": "892a9547afb95dc4abea8fd3eef046ba1e365dbefa75356c3e0b907f0871cc1f",
+  "decision": "User supplied explicit object 6 arrows on both v03 boards. These replace D candidate and old C endpoint; A summer reference remains valid context.",
+  "corrections": [
+    {
+      "view": "D",
+      "label": "6",
+      "arrowId": "shape:44uhE-J7LYb5p1bCXECUs",
+      "origin": "user-correction-arrow-on-v03-board",
+      "status": "user-explicit-location",
+      "boardShapeId": "shape:summit-location-plan-v03-r02",
+      "boardPixel": [
+        2414.8759739302545,
+        738.7142152256006
+      ],
+      "sourceFile": "asset-2098789449.png",
+      "sourceUV": [
+        0.5127659574856094,
+        0.532009980099031
+      ],
+      "sourcePixel": [
+        1424.4638298950229,
+        683.1008144471558
+      ],
+      "displayUV": [
+        0.5166758711151852,
+        0.532009980099031
+      ],
+      "canvasEndpoint": [
+        7276.263726760185,
+        2312.8488723026558
+      ],
+      "roundTripErrorPixels": 0.0
+    },
+    {
+      "view": "C",
+      "label": "6",
+      "arrowId": "shape:fmefHkubp-_X-f4lMY4QT",
+      "origin": "user-correction-arrow-on-v03-board",
+      "status": "user-explicit-location",
+      "boardShapeId": "shape:summit-cross-view-check-v03-r02",
+      "boardPixel": [
+        2385.9399789102913,
+        768.7720484623941
+      ],
+      "sourceFile": "asset--1407903703.webp",
+      "sourceUV": [
+        0.49727880624014165,
+        0.5811999385908777
+      ],
+      "sourcePixel": [
+        1909.5506159621439,
+        1255.3918673562957
+      ],
+      "displayUV": [
+        0.49727880624014165,
+        0.5811999385908777
+      ],
+      "canvasEndpoint": [
+        9643.607728098226,
+        2370.904887991775
+      ],
+      "roundTripErrorPixels": 0.0
+    }
+  ],
+  "rejectedCandidate": {
+    "view": "D",
+    "label": "6?",
+    "sourceUV": [
+      0.33387329013678907,
+      0.4273753894080997
+    ],
+    "status": "candidate-only",
+    "origin": "visual-feature-pick",
+    "note": "Visible wooden frame left of mast; not user-confirmed cross-view identity."
+  },
+  "scope": "Only object 6 updated; other category pins unchanged from v03."
+}

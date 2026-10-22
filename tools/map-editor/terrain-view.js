@@ -1,10 +1,12 @@
 // The editor's terrain: the heightfield as a grid of chunk meshes that can be
 // re-heighted one chunk at a time, drawn as a working map rather than the
 // game's toon look: elevation tint, hillshade, 25/100 m contours, the tile grid,
-// deleted tiles striped red, the selection in amber.
+// deleted tiles striped red, the selection in amber, and, as a layer, the runs
+// as wide as the game makes them.
 import * as THREE from 'three';
 
 const CHUNK = 100; // cells per chunk side
+const WIDTH_RANGE = 40; // m from a centreline the widths layer can tell apart
 
 export class TerrainView {
   constructor(hf) {
@@ -21,7 +23,12 @@ export class TerrainView {
       uRect: { value: new THREE.Vector4(-1, -1, -2, -2) }, // tile range being hovered / dragged
       uRectColor: { value: new THREE.Color('#f0c24a') },
       uMinMax: { value: new THREE.Vector2(1200, 3000) },
+      // The widths layer (see setPiste): on, the game's piste half-width, range.
+      uPiste: { value: new THREE.DataTexture(new Uint8Array(4).fill(255), 1, 1) },
+      uPisteGrid: { value: new THREE.Vector4(0, 0, 1, 1) },
+      uWidths: { value: new THREE.Vector4(0, 17, WIDTH_RANGE, 0) },
     };
+    this.uniforms.uPiste.value.needsUpdate = true;
     this.material = makeMaterial(this.uniforms);
     this.chunks = [];
     const per = CHUNK, count = Math.ceil(hf.cells / per);
@@ -91,6 +98,34 @@ export class TerrainView {
     for (let t = 0; t < this.tileData.length; t++) this.tileData[t] &= ~2;
     for (const t of tiles) this.tileData[t] |= 2;
     this.tileTex.needsUpdate = true;
+  }
+
+  // The widths layer reads the game's piste field (PisteField in world/data.js):
+  // per texel, the colour of the nearest run (`colors`, one per run) and, in
+  // alpha, how far it is from that run's centreline.
+  setPiste(field, colors) {
+    const { n } = field;
+    let tex = this.uniforms.uPiste.value;
+    if (tex.image.width !== n) {
+      tex.dispose();
+      tex = this.uniforms.uPiste.value = new THREE.DataTexture(new Uint8Array(n * n * 4), n, n);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.magFilter = tex.minFilter = THREE.LinearFilter;
+    }
+    const rgb = colors.map((c) => { const h = new THREE.Color(c).getHex(); return [h >> 16, (h >> 8) & 255, h & 255]; });
+    const data = tex.image.data;
+    for (let k = 0; k < n * n; k++) {
+      const c = rgb[field.run[k]];
+      if (c) data.set(c, k * 4);
+      data[k * 4 + 3] = Math.round(Math.min(1, field.dist[k] / WIDTH_RANGE) * 255);
+    }
+    tex.needsUpdate = true;
+    this.uniforms.uPisteGrid.value.set(field.x0, field.z0, field.cell, n);
+  }
+
+  showWidths(on, halfWidth) {
+    this.uniforms.uWidths.value.x = on ? 1 : 0;
+    if (halfWidth) this.uniforms.uWidths.value.y = halfWidth;
   }
 
   // Outline a tile range (inclusive), e.g. the tile under the cursor or a box drag.
@@ -169,6 +204,9 @@ function makeMaterial(uniforms) {
         uniform vec4 uRect;
         uniform vec3 uRectColor;
         uniform vec2 uMinMax;
+        uniform sampler2D uPiste;
+        uniform vec4 uPisteGrid; // x0, z0, cell, cells per side
+        uniform vec4 uWidths; // on, piste half-width, range
         // Anti-aliased line at every multiple of 'period' along value v.
         float isoLine(float v, float period, float width) {
           float f = abs(fract(v / period + 0.5) - 0.5) * period;
@@ -196,6 +234,20 @@ function makeMaterial(uniforms) {
         float gridA = 1.0 - smoothstep(0.04, 0.12, px);
         vec2 g = abs(fract(tileF + 0.5) - 0.5) / max(fwidth(tileF), vec2(1e-5));
         col = mix(col, vec3(0.14, 0.19, 0.23), (1.0 - smoothstep(0.0, 1.2, min(g.x, g.y))) * 0.35 * gridA);
+        // Run widths: each run as wide as the game grooms it, in its difficulty's
+        // colour and edged with it; a thin line 2 m further out, as far as the
+        // board rides it as piste; then the forest's margin, hatched, where
+        // the first trees can stand.
+        if (uWidths.x > 0.5) {
+          vec4 pv = texture2D(uPiste, ((vEdWorld.xz - uPisteGrid.xy) / uPisteGrid.z + 0.5) / uPisteGrid.w);
+          float d = pv.a * uWidths.z, fw = max(fwidth(d), 1e-3), hw = uWidths.y;
+          col = mix(col, pv.rgb, (1.0 - smoothstep(hw - fw, hw + fw, d)) * 0.3);
+          col = mix(col, pv.rgb, (1.0 - smoothstep(0.6, 1.6, abs(d - hw) / fw)) * 0.95);
+          col = mix(col, vec3(0.14, 0.19, 0.23), (1.0 - smoothstep(0.4, 1.2, abs(d - hw - 2.0) / fw)) * 0.7);
+          float hv = (vEdWorld.x - vEdWorld.z) / 4.0;
+          float hatch = mix(0.5, step(0.5, fract(hv)), 1.0 - smoothstep(0.15, 0.4, fwidth(hv)));
+          col = mix(col, vec3(0.25, 0.42, 0.33), step(hw + 2.0, d) * step(d, hw + 8.0) * hatch * 0.35);
+        }
         // Deleted: dark red with diagonal stripes.
         if (hole > 0.5) {
           float stripe = step(0.5, fract((tileF.x + tileF.y) * 4.0));

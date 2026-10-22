@@ -22,9 +22,9 @@ The repo holds two lines of work. Keep them apart.
 | `public/models/<name>/` | finished GLBs from the asset lab, each with a README: source, SHA-256, size, facing | yes |
 | `tools/map-editor/` | the map editor (`/tools/map-editor/`) and its dev-server save plugin | no |
 | `tools/terrain/` | the terrain baker (`npm run fetch-data`; `-- diorama` for the diorama's block) | no |
-| `tools/review/` | review pages for the riders and the dog (`/tools/review/rider.html`, `dog.html`) | no |
+| `tools/review/` | review pages for the riders, the dog and the summit's landmarks (`/tools/review/rider.html`, `dog.html`, `summit.html`) | no |
 | `tests/` | `npm test` | no |
-| `scripts/` | `Hemu Ski.command`, the double-click launcher | no |
+| `scripts/` | double-click launchers for the game (`Hemu Ski.command`) and the map editor (`Hemu Map Editor.command`), sharing one dev server on port 5190 | no |
 | `output/`, `.cache/` | local screenshots and videos, and the baker's download cache (both ignored) | no |
 
 Rules:

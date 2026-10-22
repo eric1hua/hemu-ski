@@ -1,16 +1,20 @@
 // Map editor: a top-down working view of the game's map, for deleting tiles,
 // raising and lowering them, reshaping the runs (their line and the ground
-// under them), and removing and planting trees. Saves go to public/data/edits/ through the dev server, and the
-// game picks them up on its next load.
+// under them), removing and planting trees, and moving the lift stations and
+// the things placed on the map, with a layer that shows the runs as wide as
+// the game makes them. Saves go to public/data/edits/ through the dev server,
+// and the game picks them up on its next load.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadWorld, PISTE_HALF_WIDTH } from '../../src/world/data.js';
+import { loadWorld, PisteField, PISTE_HALF_WIDTH, applyPlaces, placeOf } from '../../src/world/data.js';
 import { createBackdrop } from '../../src/world/terrain.js';
 import { SKY } from '../../src/world/sky.js';
+import { GAME_FOREST } from '../../src/world/trees.js';
 import { EditMap } from './map.js';
 import { TerrainView } from './terrain-view.js';
 import { RunsView, DIFF_COLORS } from './runs-view.js';
 import { TreesView, TREE_HEIGHT } from './trees-view.js';
+import { ObjectsView } from './objects-view.js';
 
 const TREELINE = 2350;
 const $ = (id) => document.getElementById(id);
@@ -37,6 +41,8 @@ const runsView = new RunsView(hf, map.runs, world.meta.lifts);
 scene.add(runsView.group);
 const treesView = new TreesView(hf, map, world.meta.lifts);
 scene.add(treesView.group);
+const objectsView = new ObjectsView(hf, map);
+scene.add(objectsView.group);
 
 // ---------- Camera ----------
 const controls = new OrbitControls(camera, canvas);
@@ -61,7 +67,11 @@ function fitMap() {
 function frameSelection() {
   let pts = [];
   if (tool === 'runs' && runsView.selected >= 0) pts = map.runs[runsView.selected].points;
-  else if (tool === 'trees') for (const id of treesView.selection) { const t = treesView.get(id); pts.push([t.x, t.z]); }
+  else if (tool === 'objects') {
+    const it = objectsView.selectedItem;
+    if (it?.kind === 'station') pts = [0, 1].map((end) => { const e = objectsView.get(`lift:${it.li}:${end}`); return [e.x, e.z]; });
+    else if (it) pts = [[it.x - it.hd, it.z - it.hd], [it.x + it.hd, it.z + it.hd]];
+  } else if (tool === 'trees') for (const id of treesView.selection) { const t = treesView.get(id); pts.push([t.x, t.z]); }
   else for (const t of selection) { const r = map.tileVerts(t); pts.push([hf.x0 + r.i0 * hf.step, hf.z0 + r.j0 * hf.step], [hf.x0 + r.i1 * hf.step, hf.z0 + r.j1 * hf.step]); }
   if (!pts.length) return fitMap();
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
@@ -81,6 +91,7 @@ function resize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   runsView.setResolution(w, h);
+  objectsView.setResolution(w, h);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -104,6 +115,9 @@ function setTool(t) {
   treesView.setShowRemoved(t === 'trees');
   treesView.setHover(null);
   if (t !== 'trees') treesView.setSelection([]);
+  objectsView.group.visible = t === 'objects';
+  objectsView.setHover(null);
+  if (t !== 'objects') objectsView.setSelected(null);
   updatePanButton();
   updatePanels();
 }
@@ -176,6 +190,26 @@ function updatePanels() {
   document.querySelector('[data-act="tree-remove"]').disabled = ts.length === gone;
   document.querySelector('[data-act="tree-restore"]').disabled = !gone;
 
+  const it = objectsView.selectedItem;
+  const liftMoved = (l) => JSON.stringify(map.baked.lifts.find((b) => b.id === l.id)?.points) !== JSON.stringify(l.points);
+  let moved = false;
+  if (it?.kind === 'place') {
+    const zh = objectsView.zh(it.id);
+    moved = !!map.places[it.id];
+    $('obj-info').innerHTML = `<span class="badge" style="background:${it.color}"></span>${objectsView.label(it.id)}${zh ? ` · ${zh}` : ''}<br><span class="dim">x ${Math.round(it.x)} · z ${Math.round(it.z)} · ${Math.round(hf.heightAt(it.x, it.z)).toLocaleString()} m · faces ${bearingName(it.yaw)}${moved ? ' · <b>moved</b>' : ''}</span>`;
+    $('p-facing').value = Math.round(bearingOf(it.yaw)) % 360;
+  } else if (it) {
+    const lift = map.lifts[it.li], { length, rise } = objectsView.liftStats(it.li);
+    moved = liftMoved(lift);
+    $('obj-info').innerHTML = `<span class="badge" style="background:${it.color}"></span>${objectsView.label(it.id)}<br><span class="dim">${lift.type.replace('_', ' ')} · ${Math.round(length).toLocaleString()} m long · climbs ${Math.round(rise)} m${moved ? ' · <b>moved</b>' : ''}</span>`;
+  } else {
+    const n = Object.keys(map.places).length + map.lifts.filter(liftMoved).length;
+    $('obj-info').innerHTML = `Click a hall, the hot spring, a vehicle or a lift station.${n ? `<br><span class="dim">${n} moved</span>` : ''}`;
+  }
+  const turnable = it?.kind === 'place';
+  document.querySelector('[data-act="obj-left"]').disabled = document.querySelector('[data-act="obj-right"]').disabled = $('p-facing').disabled = !turnable;
+  document.querySelector('[data-act="obj-reset"]').disabled = !moved;
+
   $('undo').disabled = !map.undoStack.length;
   $('redo').disabled = !map.redoStack.length;
   $('save').classList.toggle('dirty', map.dirty);
@@ -203,10 +237,59 @@ map.onChange((c) => {
   }
   if (c.holes) treesView.invalidate();
   if (c.run !== undefined) treesView.invalidateRun(c.run);
-  if (c.heights || c.holes || c.run !== undefined || c.trees) treesView.refresh();
+  if (c.objects) {
+    objectsView.rebuild();
+    runsView.rebuildLifts();
+    // The forest keeps clear of the lifts and around the halls and the pool:
+    // re-plant where one of those was and where it went.
+    const now = clearedAreas();
+    for (const [k, area] of now) if (String(cleared.get(k)) !== String(area)) { treesView.invalidate(cleared.get(k)); treesView.invalidate(area); }
+    cleared = now;
+  } else if (c.heights) objectsView.rebuild();
+  if (c.heights || c.holes || c.run !== undefined || c.trees || c.objects) treesView.refresh();
+  if (c.run !== undefined) { widthsStale = true; if (widthsOn) setWidths(true); }
   if (c.label) say(c.label);
   updatePanels();
 });
+
+// The ground each lift and clearing keeps free of trees, [x0, z0, x1, z1].
+function clearedAreas() {
+  const out = new Map(), pad = 24; // a lift's 9 m, and trees wobble off their grid corner
+  map.lifts.forEach((l, i) => {
+    const a = l.points[0], b = l.points[l.points.length - 1];
+    out.set(`lift:${i}`, [Math.min(a[0], b[0]) - pad, Math.min(a[1], b[1]) - pad, Math.max(a[0], b[0]) + pad, Math.max(a[1], b[1]) + pad]);
+  });
+  GAME_FOREST.clearings.forEach((c, i) => out.set(`clearing:${i}`, [c.x - c.r - pad, c.z - c.r - pad, c.x + c.r + pad, c.z + c.r + pad]));
+  return out;
+}
+let cleared = clearedAreas();
+
+// Facing as a compass bearing: yaw 0 faces +z, which is south.
+const bearingOf = (yaw) => (((180 - THREE.MathUtils.radToDeg(yaw)) % 360) + 360) % 360;
+const yawOf = (bearing) => THREE.MathUtils.degToRad(180 - bearing);
+function bearingName(yaw) {
+  const b = bearingOf(yaw);
+  return `${Math.round(b) % 360}° ${['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8]}`;
+}
+
+// ---------- Run widths ----------
+// The game's piste field over the edited runs: the same distances it grooms,
+// clears the forest and rides by. Rebuilt when a run changes, while the layer
+// is up.
+let widthsOn = false, widthsStale = true, piste = null;
+function setWidths(on) {
+  widthsOn = on;
+  if (on && widthsStale) {
+    piste = new PisteField(map.runs, hf.size, 4, 60, hf.center);
+    terrain.setPiste(piste, map.runs.map((r) => DIFF_COLORS[r.difficulty] || DIFF_COLORS.intermediate));
+    widthsStale = false;
+  }
+  terrain.showWidths(on, PISTE_HALF_WIDTH);
+  $('widths').setAttribute('aria-pressed', String(on));
+  $('legend').classList.toggle('hidden', !on);
+  $('lg-half').textContent = PISTE_HALF_WIDTH;
+}
+$('widths').addEventListener('click', () => setWidths(!widthsOn));
 
 // ---------- Actions ----------
 function act(name) {
@@ -226,8 +309,33 @@ function act(name) {
     case 'run-lower': return ri >= 0 && map.groomRun(ri, 'raise', { ...groom, dh: -step });
     case 'tree-remove': return map.removeTrees([...treesView.selection].filter((id) => !treesView.get(id).removed));
     case 'tree-restore': return map.restoreTrees([...treesView.selection]);
+    case 'obj-left': return turnBy(-15);
+    case 'obj-right': return turnBy(15);
+    case 'obj-reset': return putBack();
   }
 }
+
+// Turn the selected place by `deg` degrees (clockwise, seen from above).
+function turnBy(deg) {
+  const it = objectsView.selectedItem;
+  if (it?.kind !== 'place') return;
+  const { x, z, yaw } = placeOf(it.id);
+  map.editObjects(`Turn ${objectsView.label(it.id)}`, (m) => (m.places[it.id] = { x, z, yaw: yaw - THREE.MathUtils.degToRad(deg) }));
+}
+function putBack() {
+  const it = objectsView.selectedItem;
+  if (!it) return;
+  const label = `Put back ${objectsView.label(it.id)}`;
+  if (it.kind === 'place') return map.editObjects(label, (m) => delete m.places[it.id]);
+  const lift = map.lifts[it.li], was = map.baked.lifts.find((l) => l.id === lift.id);
+  if (was) map.editObjects(label, () => (lift.points = was.points.map((q) => [...q])));
+}
+$('p-facing').addEventListener('change', () => {
+  const it = objectsView.selectedItem;
+  if (it?.kind !== 'place') return;
+  const { x, z } = placeOf(it.id);
+  map.editObjects(`Turn ${objectsView.label(it.id)}`, (m) => (m.places[it.id] = { x, z, yaw: yawOf(+$('p-facing').value || 0) }));
+});
 document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
 
 $('undo').addEventListener('click', () => map.undo() ?? say('Nothing to undo'));
@@ -238,7 +346,7 @@ async function save() {
   try {
     say('Saving…');
     const e = await map.save();
-    say(`Saved: ${e.holes.length} deleted tiles, ${e.runs.length} runs, ${e.trees.removed.length} trees removed, ${e.trees.added.length} planted`);
+    say(`Saved: ${e.holes.length} deleted tiles, ${e.runs.length} runs, ${e.trees.removed.length} trees removed, ${e.trees.added.length} planted, ${Object.keys(e.places).length} places moved`);
   } catch (err) {
     say(err.message);
     throw err;
@@ -273,7 +381,7 @@ window.addEventListener('beforeunload', (e) => {
 const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const mouse = { x: 0, y: 0 };
-let drag = null; // { kind: 'box', from, mode } | { kind: 'point', ri, k, before } | { kind: 'trees', x, y, mode, box } | { kind: 'plant', before, last }
+let drag = null; // { kind: 'box', from, mode } | { kind: 'point', ri, k, before } | { kind: 'trees', x, y, mode, box } | { kind: 'plant', before, last } | { kind: 'object' | 'turn', id, before, ... }
 
 function groundAt(e) {
   mouse.x = e.clientX; mouse.y = e.clientY;
@@ -310,7 +418,12 @@ function showCursor(p) {
   if (!p) { $('st-cursor').textContent = '—'; return; }
   const t = hf.tileAt(p.x, p.z);
   const [i, j] = t >= 0 ? tileXY(t) : ['–', '–'];
-  $('st-cursor').textContent = `x ${Math.round(p.x)} · z ${Math.round(p.z)} · ${Math.round(p.y).toLocaleString()} m · tile ${i}, ${j}${t >= 0 && hf.holes[t] ? ' (deleted)' : ''}`;
+  let on = '';
+  if (widthsOn && piste) {
+    const d = piste.distAt(p.x, p.z), ri = piste.runAt(p.x, p.z);
+    if (ri >= 0 && d < 40) on = ` · ${map.runs[ri].name || 'unnamed run'}, ${Math.round(d)} m from its line${d < PISTE_HALF_WIDTH ? '' : d < PISTE_HALF_WIDTH + 2 ? ' (its edge)' : ' (off it)'}`;
+  }
+  $('st-cursor').textContent = `x ${Math.round(p.x)} · z ${Math.round(p.z)} · ${Math.round(p.y).toLocaleString()} m · tile ${i}, ${j}${t >= 0 && hf.holes[t] ? ' (deleted)' : ''}${on}`;
 }
 
 canvas.addEventListener('pointermove', (e) => {
@@ -367,8 +480,46 @@ canvas.addEventListener('pointermove', (e) => {
       treesView.setHover(t ? t.id : null);
       canvas.style.cursor = t ? 'pointer' : 'crosshair';
     }
+  } else if (tool === 'objects') {
+    if (drag?.kind === 'object') {
+      if (p && hf.inside(p.x, p.z, 20)) { moveObject(drag, p); drag.moved = true; }
+      return;
+    }
+    if (drag?.kind === 'turn') {
+      if (p) { turnObject(drag, p, e.shiftKey); drag.moved = true; }
+      return;
+    }
+    const onHandle = objectsView.pickHandle(mouse, camera, W, H);
+    const id = onHandle ? null : objectsView.pick(mouse, camera, W, H, p);
+    objectsView.setHover(id);
+    canvas.style.cursor = onHandle ? 'grab' : id ? 'move' : 'crosshair';
   }
 });
+
+// Moving and turning happen live; the forest catches up on release.
+function moveObject(d, p) {
+  const dx = p.x - d.from.x, dz = p.z - d.from.z;
+  if (d.ends) {
+    for (const { lift, k, at } of d.ends) lift.points[k] = [at[0] + dx, at[1] + dz];
+    runsView.rebuildLifts();
+  } else map.places[d.id] = { ...d.start, x: d.start.x + dx, z: d.start.z + dz };
+  applyPlaces(map.places);
+  objectsView.rebuild();
+  updatePanels();
+}
+// Turned by however far round its middle the pointer has gone since it grabbed the handle.
+function turnObject(d, p, snap) {
+  const angle = (q) => Math.atan2(q.x - d.start.x, q.z - d.start.z);
+  let yaw = d.start.yaw + angle(p) - angle(d.from);
+  if (snap) yaw = Math.round(yaw / (Math.PI / 12)) * (Math.PI / 12);
+  map.places[d.id] = { ...d.start, yaw };
+  applyPlaces(map.places);
+  objectsView.rebuild();
+  updatePanels();
+}
+// Every lift end at exactly this point: where one lift's top is the next one's bottom.
+const endsAt = (at) => map.lifts.flatMap((lift) => [0, lift.points.length - 1]
+  .filter((k) => lift.points[k][0] === at[0] && lift.points[k][1] === at[1]).map((k) => ({ lift, k, at: [...at] })));
 
 // Apply a click or box to the tree selection.
 function selectTrees(ids, mode) {
@@ -412,6 +563,27 @@ canvas.addEventListener('pointerdown', (e) => {
       drag = { kind: 'trees', x: e.clientX, y: e.clientY, p, mode: e.shiftKey ? 'add' : e.altKey ? 'sub' : 'replace', box: null };
     }
     canvas.setPointerCapture(e.pointerId);
+  } else if (tool === 'objects') {
+    const W = window.innerWidth, H = window.innerHeight, before = map.objectSnapshot();
+    if (objectsView.pickHandle(mouse, camera, W, H)) {
+      const id = objectsView.selected;
+      if (!p) return;
+      drag = { kind: 'turn', id, start: placeOf(id), from: { x: p.x, z: p.z }, before };
+      canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    const id = objectsView.pick(mouse, camera, W, H, p);
+    objectsView.setSelected(id);
+    updatePanels();
+    if (!id || !p) return;
+    const it = objectsView.get(id);
+    drag = { kind: 'object', id, from: { x: p.x, z: p.z }, before };
+    if (it.kind === 'station') {
+      const lift = map.lifts[it.li], k = it.end ? lift.points.length - 1 : 0;
+      // Joined stations move together, unless Alt pulls this one away.
+      drag.ends = e.altKey ? [{ lift, k, at: [...lift.points[k]] }] : endsAt(lift.points[k]);
+    } else drag.start = placeOf(id);
+    canvas.setPointerCapture(e.pointerId);
   }
 });
 
@@ -438,6 +610,8 @@ canvas.addEventListener('pointerup', (e) => {
   } else if (drag.kind === 'plant') {
     const n = map.trees.added.length - drag.before.added.length;
     map.editTrees(`Plant ${n} tree${n > 1 ? 's' : ''}`, null, drag.before);
+  } else if ((drag.kind === 'object' || drag.kind === 'turn') && drag.moved) {
+    map.editObjects(`${drag.kind === 'turn' ? 'Turn' : 'Move'} ${objectsView.label(drag.id)}`, null, drag.before);
   }
   drag = null;
 });
@@ -467,6 +641,7 @@ function removePoint(ri, k) {
 canvas.addEventListener('pointerleave', () => {
   if (!drag) terrain.setRect(null);
   treesView.setHover(null);
+  if (!drag) objectsView.setHover(null);
   showCursor(null);
 });
 
@@ -485,7 +660,10 @@ window.addEventListener('keydown', (e) => {
     case 'KeyR': return setTool('runs');
     case 'KeyG': return setTool('trees');
     case 'KeyP': return tool === 'trees' && setTreeMode(treeMode === 'plant' ? 'select' : 'plant');
+    case 'KeyO': return setTool('objects');
     case 'KeyH': return setTool('hand');
+    case 'KeyL': return setWidths(!widthsOn);
+    case 'KeyQ': case 'KeyE': return tool === 'objects' && turnBy((e.code === 'KeyQ' ? -1 : 1) * (e.shiftKey ? 1 : 15));
     case 'KeyF': return frameSelection();
     case 'Home': return fitMap();
     case 'Space':
@@ -503,6 +681,7 @@ window.addEventListener('keydown', (e) => {
     case 'Escape':
       if (tool === 'tiles') { selection.clear(); terrain.setSelection(selection); }
       else if (tool === 'trees') treesView.setSelection([]);
+      else if (tool === 'objects') objectsView.setSelected(null);
       else runsView.setSelected(-1);
       return updatePanels();
   }
@@ -544,8 +723,20 @@ renderer.setAnimationLoop(() => {
   // Near plane follows the zoom, so close-ups don't clip and far views keep depth precision.
   const near = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) * 0.004, 0.5, 40);
   if (Math.abs(near - camera.near) > near * 0.2) { camera.near = near; camera.updateProjectionMatrix(); }
+  objectsView.update(camera, window.innerHeight);
+  placeLabel();
   renderer.render(scene, camera);
 });
 
+// The name of the object under the mouse (or the selected one) beside it.
+function placeLabel() {
+  const id = tool === 'objects' ? objectsView.hovered ?? (drag ? null : objectsView.selected) : null;
+  const at = id && objectsView.screenOf(id, camera, window.innerWidth, window.innerHeight);
+  $('obj-label').classList.toggle('hidden', !at);
+  if (!at) return;
+  if ($('obj-label').dataset.id !== id) { $('obj-label').dataset.id = id; $('obj-label').textContent = objectsView.label(id); }
+  Object.assign($('obj-label').style, { left: `${at.x}px`, top: `${at.y}px` });
+}
+
 // For poking at from the console.
-window.__editor = { map, terrain, runsView, treesView, camera, controls, selection };
+window.__editor = { map, terrain, runsView, treesView, objectsView, camera, controls, selection, setTool, setWidths };

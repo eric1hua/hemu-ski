@@ -12,6 +12,7 @@
   </head>
   <body>
     <canvas id="game"></canvas>
+    <div class="ed-label hidden" id="obj-label"></div>
 
     <aside class="ed-card ed-tools">
       <div class="tab">Map editor</div>
@@ -19,7 +20,8 @@
         <button data-tool="tiles" title="Tiles (T)">▦ Tiles <kbd>T</kbd></button>
         <button data-tool="runs" title="Runs (R)">〰 Runs <kbd>R</kbd></button>
         <button data-tool="trees" title="Trees (G)">♣ Trees <kbd>G</kbd></button>
-        <button data-tool="hand" title="Hand (H)">✋ Hand <kbd>H</kbd></button>
+        <button data-tool="objects" title="Objects (O)">✥ Objects <kbd>O</kbd></button>
+        <button data-tool="hand" title="Hand (H)">✋ <kbd>H</kbd></button>
       </div>
 
       <section data-panel="tiles">
@@ -59,6 +61,16 @@
         <p class="hint" id="tree-hint"></p>
       </section>
 
+      <section data-panel="objects" class="hidden">
+        <p class="ed-sel" id="obj-info">Click something to move it.</p>
+        <div class="ed-grid">
+          <button data-act="obj-left" title="Turn left 15° (Q; Shift: 1°)">⟲ Turn left</button>
+          <button data-act="obj-right" title="Turn right 15° (E; Shift: 1°)">⟳ Turn right</button>
+          <button data-act="obj-reset" title="Put it back where the game first had it">↺ Put back</button>
+        </div>
+        <p class="hint">Drag a hall, the hot spring, a vehicle or a lift station to move it; drag the round handle off its corner to turn it (Shift snaps to 15°). Joined stations move together: Alt-drag pulls one away.</p>
+      </section>
+
       <section data-panel="hand" class="hidden">
         <p class="hint">Left-drag pans. In any tool, right-drag orbits, middle-drag (or Space + drag) pans, and the wheel zooms to the cursor.</p>
       </section>
@@ -68,6 +80,7 @@
         <label data-only="tiles runs hand">Blend <input id="p-blend" type="number" min="0" max="400" step="10" value="60" /> m</label>
         <label data-only="trees">Forest density <input id="p-density" type="number" min="0" max="100" step="5" value="50" /> %</label>
         <label data-only="runs">Run width <input id="p-width" type="number" min="4" max="200" step="2" value="34" /> m</label>
+        <label data-only="objects">Facing <input id="p-facing" type="number" min="0" max="360" step="1" value="0" /> °</label>
       </div>
     </aside>
 
@@ -75,9 +88,16 @@
       <button id="undo" title="Undo (⌘Z)">↶</button>
       <button id="redo" title="Redo (⇧⌘Z)">↷</button>
       <button id="fit" title="Whole map (Home)">⌂</button>
+      <button id="widths" title="Show how wide the game makes the runs (L)" aria-pressed="false">▭ Widths</button>
       <button id="save" title="Save (⌘S)">Save</button>
       <button id="play" title="Save and ride it">Ride ▸</button>
       <button id="reset" class="warn" title="Throw away saved edits and go back to the baked map">Reset</button>
+    </div>
+
+    <div class="ed-card ed-legend hidden" id="legend">
+      <span><i class="sw groomed"></i>groomed run, <b id="lg-half">17</b> m each side of its line</span>
+      <span><i class="sw edge"></i>where the board stops riding it as piste</span>
+      <span><i class="sw trees"></i>the forest's margin: trees from here</span>
     </div>
 
     <div class="ed-box hidden" id="box"></div>
@@ -98,6 +118,8 @@
         <span><kbd>]</kbd><kbd>[</kbd></span><span>raise / lower by the step</span>
         <span><kbd>Del</kbd></span><span>delete tiles / run point / trees</span>
         <span><kbd>P</kbd></span><span>trees: select ↔ plant</span>
+        <span><kbd>Q</kbd><kbd>E</kbd></span><span>objects: turn left / right</span>
+        <span><kbd>L</kbd></span><span>run widths layer</span>
         <span><kbd>Esc</kbd></span><span>clear the selection</span>
         <span><kbd>⌘Z</kbd><kbd>⌘S</kbd></span><span>undo · save</span>
       </div>

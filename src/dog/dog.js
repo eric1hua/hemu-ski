@@ -37,7 +37,8 @@ const angleTo = (from, to) => mod(to - from + Math.PI, Math.PI * 2) - Math.PI;
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
 export class Dog {
-  // `home`: { x, z, yaw } where it lives. `obstacles`: rotated boxes it walks
+  // `home`: { x, z, yaw } where it lives (and, for a home indoors, `roam`, `via`,
+  // `door` and `inside`: see cabinSpace in world/summit.js). `obstacles`: rotated boxes it walks
   // round (the game's footprints, a live list); it goes round trees too.
   constructor({ hf, forest, obstacles = [], home }) {
     this.hf = hf;
@@ -46,7 +47,7 @@ export class Dog {
     this.home = home;
     this.root = new THREE.Group();
     this.root.name = 'Dog';
-    this.pos = new THREE.Vector3(home.x, hf.heightAt(home.x, home.z), home.z);
+    this.pos = new THREE.Vector3(home.x, this.hf.heightAt(home.x, home.z), home.z);
     this.yaw = home.yaw;
     this.speed = 0;
     this.turnRate = 0;
@@ -445,7 +446,7 @@ export class Dog {
     this.idleSit = false;
     if (w < 0.3) this.glance = rand(-1.2, 1.2);
     else if (w < 0.55) {
-      const a = Math.random() * Math.PI * 2, r = rand(1.5, 5);
+      const roam = this.home.roam ?? 5, a = Math.random() * Math.PI * 2, r = rand(Math.min(1.5, roam * 0.5), roam);
       const x = this.home.x + Math.cos(a) * r, z = this.home.z + Math.sin(a) * r;
       if (this.#clear(x, z, 0.5)) this.wander = { x, z, speed: SPEED.walk, stop: 0.3 };
     } else if (w < 0.68) b.play('shake');
@@ -529,7 +530,18 @@ export class Dog {
   // speeds up and slows to stop at it, and goes round trees, buildings and the
   // map's edge.
   #move(dt) {
-    const g = this.goal;
+    let g = this.goal;
+    // In or out of an indoor home: by the spot inside its door and the one out
+    // in front of it, in the order it's going, then on for whatever it's after.
+    const { inside, door, via } = this.home;
+    if (inside && door && via && g) {
+      const goalIn = inside(g.x, g.z);
+      if (this.doorway && (this.doorway.at(-1) === door) !== goalIn) this.doorway = null; // its goal went the other side
+      if (!this.doorway && inside(this.pos.x, this.pos.z) !== goalIn) this.doorway = goalIn ? [via, door] : [door, via];
+      while (this.doorway?.length && this.#near(this.doorway[0], 0.5)) this.doorway.shift();
+      if (this.doorway?.length) g = { ...g, x: this.doorway[0].x, z: this.doorway[0].z, stop: 0.3, lead: null, speed: Math.min(g.speed, SPEED.walk) };
+      else this.doorway = null;
+    }
     let wantSpeed = 0, wantYaw = this.yaw;
     if (g) {
       // A moving target: aim where they'll be.

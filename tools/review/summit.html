@@ -1,0 +1,25 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Summit review</title>
+<style>
+body{margin:0;background:#1d2428;font:13px system-ui;color:#23303a;overflow:hidden}
+#stage{position:absolute;left:0;top:0}
+#stage canvas,#stage img,#stage svg{position:absolute;left:0;top:0;width:100%;height:100%}
+#stage img{pointer-events:none;opacity:0}
+#stage svg{pointer-events:none;overflow:visible}
+nav{position:absolute;top:10px;left:10px;background:#fffe;padding:8px 10px;border-radius:8px;width:230px;z-index:2}
+nav button{font:inherit;margin:2px;padding:3px 8px}
+nav button.on{background:#23303a;color:#fff}
+nav label{display:flex;gap:6px;align-items:center;margin-top:4px}
+nav input[type=range]{flex:1}
+output{display:block;white-space:pre-wrap;font:11px ui-monospace,monospace;margin-top:6px;color:#4a5661}
+.pin circle{fill:#d8352a;stroke:#fff;stroke-width:2}
+.pin text{fill:#fff;font:700 13px system-ui;paint-order:stroke;stroke:#d8352a;stroke-width:4px}
+</style>
+<div id="stage"><canvas id="game"></canvas><img id="photo" alt=""><svg id="pins"></svg></div>
+<nav>
+  <div id="views"></div>
+  <label>photo <input id="opacity" type="range" min="0" max="1" step="0.05" value="0"></label>
+  <label><input id="numbers" type="checkbox" checked> numbers</label>
+  <label><input id="arrows" type="checkbox" checked> photo arrows</label>
+  <output id="status">Loading…</output>
+</nav>
+<script type="module" src="./summit-review.js"></script></html>

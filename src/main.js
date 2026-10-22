@@ -1,17 +1,19 @@
 import * as THREE from 'three';
-import { loadWorld, PisteField, SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
+import { loadWorld, PisteField, SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN, placeOf } from './world/data.js';
 import { createDetailTerrain, createBackdrop } from './world/terrain.js';
+import { raiseBanks, gameClearings } from './world/banks.js';
 import { createForest, GAME_FOREST } from './world/trees.js';
 import { createLifts, createPisteMarkers, createBanner, createServiceCentre, gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
 import { createOnsen, PUFF_COVER } from './world/onsen.js';
+import { shapeSummit, createSummit, cabinSpace } from './world/summit.js';
 import { Dog, DOG } from './dog/dog.js';
 import { THROW } from './player/throw.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
 import { Rider } from './player/rider.js';
 import { BoardPhysics } from './player/physics.js';
-import { Trail, Spray } from './player/fx.js';
+import { Trail, BoardTrail, Spray, SnowCollar } from './player/fx.js';
 import { Truck } from './vehicle/truck.js';
 import { Snowmobile } from './vehicle/snowmobile.js';
 import { VehiclePhysics, PICKUP, SNOWMOBILE } from './vehicle/physics.js';
@@ -75,12 +77,18 @@ if (arrivalNote) document.querySelector('#loading > :last-child').textContent = 
 // The map editor's saved edits apply unless the URL says ?original.
 const world = await loadWorld('', { edits: !new URLSearchParams(location.search).has('original') });
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
-const { detail, meta } = world;
-const piste = new PisteField(meta.runs, detail.size, 4, 60, detail.center);
+const { meta } = world;
+const piste = new PisteField(meta.runs, world.detail.size, 4, 60, world.detail.center);
+// The snow banks up beside the runs (see world/banks.js), on a 4 m grid, but
+// stays level round the lift stations, the halls and the hot spring.
+const detail = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lifts));
+// The summit round the top of 6号 and 7号 is shaped for its landmarks (see
+// world/summit.js), before anything is set on the ground.
+shapeSummit(detail, meta.lifts);
 const mainRun = meta.runs.find((r) => r.name === MAIN_RUN);
 
 // The ride area runs from the summit down the valley to both service centres.
-const terrain = createDetailTerrain(detail, piste, TREELINE, { tiles: 9, lodDistance: 1200 });
+const terrain = createDetailTerrain(detail, piste, TREELINE, { tiles: 9, lodDistance: 1200, nearDistance: 300, corduroy: true });
 scene.add(terrain);
 const backdrop = createBackdrop(world.backdrop, detail, TREELINE);
 scene.add(backdrop);
@@ -93,6 +101,10 @@ scene.add(lifts.group);
 // The hot spring hidden in the trees behind the East Service Centre (see Soaking).
 const onsen = createOnsen(detail, ONSEN);
 scene.add(onsen.group);
+// The summit's landmarks, for now stand-ins; ?labels shows their numbers.
+const summit = createSummit(detail, { labels: new URLSearchParams(location.search).has('labels') });
+scene.add(summit.group);
+const cabinRoom = cabinSpace(summit.byId.get('summit:object-7')); // the coffee cabin's room, for the dog's home and the camera
 scene.add(createPisteMarkers(detail, meta.runs));
 const sky = createSky();
 scene.add(sky);
@@ -148,10 +160,13 @@ scene.add(cabin);
 // ?rider=female/male/classic.
 const rider = new Rider({ model: false });
 scene.add(rider.root);
-const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints] });
-const trail = new Trail();
+const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints, ...summit.footprints] });
+const trail = new BoardTrail();
 const spray = new Spray();
-scene.add(trail.mesh, spray.points);
+const powderSpray = new Spray(500, { size: 0.34, gravity: 4, life: 0.6 });
+const collar = new SnowCollar();
+scene.add(trail.mesh, spray.points, powderSpray.points, collar.mesh);
+let sink = 0; // how far the board rides down in the powder (see Powder, below)
 const hud = new Hud(world, piste);
 const sound = new Sound();
 const menu = createMenu(sound);
@@ -166,16 +181,15 @@ scene.add(marks.group);
 // ---------- Vehicles ----------
 // Parked for now in front of the East Service Centre, nose out: a pickup to the
 // left of the entrance, a snowmobile to the right, and a Jetson ONE, a
-// one-person aircraft, out beyond them. Any rider can take any of them: E beside
+// one-person aircraft, out beyond them (or wherever the map editor moved them;
+// see Places in world/data.js). Any rider can take any of them: E beside
 // it gets in (or on), E again gets out (see Driving). In the pickup the rider is
 // out of sight in the cab; on the snowmobile they sit on it, hands on the grips,
 // and in the Jetson they sit in its seat, hands on its two sticks.
 const eastHall = SERVICE_CENTRES.find((c) => c.id === 'east');
-// `along` metres along a hall's front from its middle and `out` from it, facing out.
-function inFrontOf(c, along, out) {
-  const yaw = Math.atan2(c.faceTo[0] - c.x, c.faceTo[1] - c.z);
-  const cos = Math.cos(yaw), sin = Math.sin(yaw);
-  return { x: c.x + along * cos + out * sin, z: c.z - along * sin + out * cos, dx: sin, dz: cos };
+function parkedAt(name) {
+  const { x, z, yaw } = placeOf(`vehicle:${name}`);
+  return { x, z, dx: Math.sin(yaw), dz: Math.cos(yaw) };
 }
 // `cam`: the chase camera's distance back, height and look-ahead, the height it
 // looks at, how far round to the side it hangs at a crawl (radians, + to the
@@ -186,21 +200,21 @@ function inFrontOf(c, along, out) {
 // button by your thumb says to get in and out.
 const vehicles = [
   {
-    name: 'pickup', model: new Truck(), handling: PICKUP, hall: eastHall, park: inFrontOf(eastHall, -16, 33),
+    name: 'pickup', model: new Truck(), handling: PICKUP, hall: eastHall, park: parkedAt('pickup'),
     cam: { back: 9, up: 3.4, ahead: 5, look: 1.4 }, wind: 0.5, // muffled by the cab
     title: 'Pickup', prompt: '<kbd>E</kbd> drive the <b>pickup</b>',
     hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get out',
     touch: { prompt: 'Drive the <b>pickup</b> ▸', enter: 'Drive', exit: 'Get out', hint: 'Stick up to drive, down to brake · sideways to steer' },
   },
   {
-    name: 'snowmobile', model: new Snowmobile(), handling: SNOWMOBILE, hall: eastHall, park: inFrontOf(eastHall, 28, 31),
+    name: 'snowmobile', model: new Snowmobile(), handling: SNOWMOBILE, hall: eastHall, park: parkedAt('snowmobile'),
     cam: { back: 5.6, up: 2.4, ahead: 4, look: 1.1 }, wind: 1,
     title: 'Snowmobile', prompt: '<kbd>E</kbd> ride the <b>snowmobile</b>',
     hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ride · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get off',
     touch: { prompt: 'Ride the <b>snowmobile</b> ▸', enter: 'Ride', exit: 'Get off', hint: 'Stick up to ride, down to brake · sideways to steer' },
   },
   {
-    name: 'jetson', model: new Jetson(), handling: JETSON, flies: true, hall: eastHall, park: inFrontOf(eastHall, 4, 52),
+    name: 'jetson', model: new Jetson(), handling: JETSON, flies: true, hall: eastHall, park: parkedAt('jetson'),
     cam: { back: 6.5, up: 3.4, ahead: 4, look: 0.9, side: -0.5, follow: 12 }, wind: 1, lean: 0.012,
     title: 'Jetson ONE', prompt: '<kbd>E</kbd> fly the <b>Jetson ONE</b>',
     hintLanded: '<kbd>Space</kbd> take off · <kbd>E</kbd> get out',
@@ -221,7 +235,7 @@ for (const v of vehicles) {
   v.model.ready.then(() => {
     v.phys = new (v.flies ? FlightPhysics : VehiclePhysics)({
       hf: detail, piste, forest, dims: v.model.dims, handling: v.handling,
-      obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints],
+      obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints, ...summit.footprints],
     });
     v.phys.reset(v.park.x, v.park.z, yawOf(v.park.dx, v.park.dz));
     v.model.update(0, v.phys);
@@ -491,14 +505,20 @@ const camLook = new THREE.Vector3();
 // so as this grows the cameras pull back, rise, look further ahead and widen
 // their lens, keeping you low in the frame with the run ahead above you.
 const portrait = () => THREE.MathUtils.clamp((1 - camera.aspect) / 0.54, 0, 1);
+// Indoors (the coffee cabin) it comes in close behind them, low and wide, like
+// a following shot, staying inside the room's walls: `indoors` eases 0 to 1 as
+// they go in through the door, and back out.
+let indoors = 0;
+const INDOORS = { dist: 2.4, up: 0.55, ahead: 1.6, look: 0.35 };
 function cameraTarget(out, look) {
-  const sp = phys.speed, p = portrait();
-  const d = 4.6 + p * 3.4 + Math.min(sp, 30) * 0.07;
+  const sp = phys.speed, p = portrait(), k = indoors;
+  const d = THREE.MathUtils.lerp(4.6 + p * 3.4 + Math.min(sp, 30) * 0.07, INDOORS.dist, k);
   out.copy(phys.pos).addScaledVector(camDir, -d);
-  out.y += 1.9 + p * 2.1 + Math.min(sp, 30) * 0.025;
-  out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 1.5);
-  look.copy(phys.pos).addScaledVector(camDir, 3.5 + p * 6.5);
-  look.y += 0.7 - p * 0.3;
+  out.y += THREE.MathUtils.lerp(1.9 + p * 2.1 + Math.min(sp, 30) * 0.025, INDOORS.up + 0.9, k);
+  if (k > 0.5 && cabinRoom.inside(phys.pos.x, phys.pos.z)) cabinRoom.keepIn(out, 0.6);
+  out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + THREE.MathUtils.lerp(1.5, 0.9, k));
+  look.copy(phys.pos).addScaledVector(camDir, THREE.MathUtils.lerp(3.5 + p * 6.5, INDOORS.ahead, k));
+  look.y += THREE.MathUtils.lerp(0.7 - p * 0.3, INDOORS.look + 0.7, k);
 }
 function snapCamera() {
   cameraTarget(camera.position, camLook);
@@ -659,12 +679,15 @@ function updateRideCamera(dt) {
     _v.normalize();
     camDir.lerp(_v, 1 - Math.exp(-dt * 2.2)).normalize();
   }
+  indoors += (cabinRoom.room(phys.pos.x, phys.pos.z) - indoors) * (1 - Math.exp(-dt * 2.5));
   cameraTarget(_w, _look);
-  camera.position.lerp(_w, 1 - Math.exp(-dt * 6));
-  camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 1.2);
-  camLook.lerp(_look, 1 - Math.exp(-dt * 10));
+  camera.position.lerp(_w, 1 - Math.exp(-dt * (6 + indoors * 3)));
+  if (indoors > 0.5 && cabinRoom.inside(phys.pos.x, phys.pos.z)) cabinRoom.keepIn(camera.position, 0.5);
+  camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 1.2 - indoors * 0.4);
+  camLook.lerp(_look, 1 - Math.exp(-dt * (10 + indoors * 4)));
   camera.lookAt(camLook);
-  camera.fov = 60 + portrait() * 15 + Math.min(sp, 30) * 0.45;
+  camera.fov = 60 + portrait() * 15 + Math.min(sp, 30) * 0.45 + indoors * 14;
+  camera.near = THREE.MathUtils.lerp(0.3, 0.08, indoors);
   camera.updateProjectionMatrix();
 }
 
@@ -683,6 +706,7 @@ function poseRider(dt, snap = false) {
   if (walking || snap || hop) rider.root.quaternion.copy(_q);
   else rider.root.quaternion.slerp(_q, 1 - Math.exp(-dt * 14));
   rider.root.position.copy(phys.pos);
+  rider.root.position.y -= sink;
   if (hop) hopping(dt);
 
   const sp = phys.speed;
@@ -699,6 +723,25 @@ function poseRider(dt, snap = false) {
     locomotion: rider.locomotion,
     speed: sp,
   });
+}
+
+// ---------- Powder ----------
+// Off the runs the board rides in the snow rather than on it (phys.powder): it
+// sinks to just over the ankles at speed, planing up on the snow, and to the
+// lower calf slowing down or braking, with the snow heaped round it.
+const POWDER = { slow: 0.22, fast: 0.12, brake: 0.04 }; // m deep
+function updateSink(dt, onBoard) {
+  const MU = THREE.MathUtils;
+  const want = onBoard
+    ? phys.powder * (MU.lerp(POWDER.slow, POWDER.fast, MU.smoothstep(phys.speed, 3, 14)) + (input.brake ? POWDER.brake : 0))
+    : 0;
+  sink += (want - sink) * Math.min(1, dt * (!phys.grounded ? 14 : want > sink ? 5 : 2.5));
+}
+function placeCollar() {
+  collar.set(THREE.MathUtils.clamp(sink / 0.18, 0, 1));
+  if (!collar.mesh.visible) return;
+  collar.mesh.position.copy(phys.pos);
+  collar.mesh.quaternion.copy(rider.root.quaternion);
 }
 
 // ---------- Loop ----------
@@ -726,16 +769,23 @@ function frame() {
       if (ev.type === 'crash') { falls++; hud.toast(ev.reason === 'tree' ? 'Tree!' : 'Wipeout!'); trail.gap(phys.pos); }
       if (ev.type === 'respawn') respawnInPlace();
       if (ev.type === 'air') hud.toast(ev.spin >= 180 ? `${ev.spin}°!` : `Air ${ev.time.toFixed(1)}s`);
+      if (ev.type === 'land' && phys.powder > 0.3) {
+        _sv.copy(phys.vel).multiplyScalar(0.15);
+        powderSpray.emit(phys.pos, _sv, Math.round(Math.min(40, 10 + ev.impact * 4) * phys.powder), 3);
+      }
     }
     if (!timing && phys.pos.distanceTo(new THREE.Vector3(spawn.x, phys.pos.y, spawn.z)) > 3) timing = true;
     if (timing) elapsed += dt;
     updateBoarding();
 
-    // Board track + spray.
+    // Board track + spray. In powder the track is a furrow, and the board
+    // throws up a plume as it goes, more when it turns or skids.
     phys.forward(_f);
     _side.set(-_f.z, 0, _f.x);
-    if (rider.locomotion !== 'walk' && phys.grounded && phys.crashed <= 0) {
-      trail.add(phys.pos, _side, 0.28);
+    const onBoard = rider.locomotion !== 'walk' && phys.grounded && phys.crashed <= 0;
+    updateSink(dt, onBoard);
+    if (onBoard) {
+      trail.add(phys.pos, _side, 0.28, phys.powder > 0.5 ? 0.36 + sink : 0);
       const kick = phys.slip * 0.6 + (input.brake ? 3 : 0) + Math.abs(phys.yawRate) * phys.speed * 0.08;
       const n = Math.min(6, Math.floor(kick * dt * 22 + Math.random()));
       if (n > 0 && phys.speed > 2) {
@@ -743,8 +793,17 @@ function frame() {
         _sv.copy(phys.vel).multiplyScalar(0.35).addScaledVector(_side, -Math.sign(phys.yawRate || 1) * 1.5);
         spray.emit(_tail, _sv, n, 2.2);
       }
+      const plume = phys.powder * (Math.max(0, phys.speed - 3) * 0.1 + kick * 0.6);
+      const m = Math.min(5, Math.floor(plume * dt * 12 + Math.random() * 0.6));
+      if (m > 0) {
+        _tail.copy(phys.pos).addScaledVector(_f, -0.4);
+        _sv.copy(phys.vel).multiplyScalar(0.25).addScaledVector(_side, -Math.sign(phys.yawRate || 1) * 1.2);
+        _sv.y -= 0.4;
+        powderSpray.emit(_tail, _sv, m, 1.4);
+      }
     } else if (!phys.grounded) trail.gap(phys.pos);
     poseRider(dt);
+    placeCollar();
     updateRideCamera(dt);
     hud.update(phys, elapsed);
     sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded && rider.locomotion !== 'walk');
@@ -794,7 +853,11 @@ function frame() {
     else if (state === 'arrive') updateArrival(dt);
     sound.update(0, 0, false);
   }
-  const onMountain = state === 'ride' || state === 'lift' || state === 'drive' || state === 'soak';
+  if (state !== 'ride') {
+    sink = 0;
+    collar.set(0);
+  }
+  const onMountain =state === 'ride' || state === 'lift' || state === 'drive' || state === 'soak';
   if (onMountain && !bigMap.isOpen) {
     const ev = gps.update(dt, gpsFrom());
     if (ev?.type === 'arrived') hud.toast(`Arrived · ${ev.name}`, 2600);
@@ -813,6 +876,7 @@ function frame() {
 
   for (const v of vehicles) if (v !== car && v.phys?.spool > 0) { v.phys.coast(dt); v.model.update(dt, v.phys); }
   spray.update(dt);
+  powderSpray.update(dt);
   lifts.update(dt);
   if (change && time >= change.at) {
     rider.wear(change.outfit);
@@ -1034,20 +1098,11 @@ function facing(at, or) {
 }
 
 // ---------- Mantou ----------
-// The resort's Old English Sheepdog lives up at the top for now, on the snow a
-// few metres off to the side of where you start, looking across at you (see
-// src/dog/dog.js). It notices you, comes over, keeps you company and chases
+// The resort's Old English Sheepdog lives up at the top, in the coffee cabin
+// on the shoulder by the summit, and comes out to meet you (see src/dog/dog.js). It notices you, comes over, keeps you company and chases
 // after you. E beside it pets it (the rider reaches down to it); Q throws a
 // snowball for it, wherever you are, in the way the camera looks.
-const dogHome = (() => {
-  const s = startAt;
-  const at = openSpot(s, [8, 10, 12], (x, z, n, R) => {
-    const ax = (x - s.x) / R, az = (z - s.z) / R;
-    const ahead = ax * s.dx + az * s.dz, side = Math.abs(ax * s.dz - az * s.dx);
-    return side * 2 - Math.max(0, ahead) * 3 - (1 - n.y) * 10 - R * 0.05;
-  }) ?? { x: s.x - s.dz * 8, z: s.z + s.dx * 8 };
-  return { x: at.x, z: at.z, yaw: Math.atan2(s.x - at.x, s.z - at.z) };
-})();
+const dogHome = cabinRoom.home;
 const dog = new Dog({ hf: detail, forest, obstacles: phys.obstacles, home: dogHome });
 scene.add(dog.root, dog.spray.points, dog.ball.mesh);
 dog.ready.catch((err) => console.warn('The dog failed to load; it stays out of the game.', err));
@@ -1677,5 +1732,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, onsen, soak, leavePool, dog, petDog, throwSnowball, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

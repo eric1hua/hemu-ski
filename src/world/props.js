@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makeToon } from '../render/toon.js';
 import { PISTE_HALF_WIDTH } from './data.js';
+import { liftStations } from './stations.js';
 
 const mats = {
   steel: makeToon({ color: '#9aa3a6' }),
@@ -158,10 +159,10 @@ function liftBadge(liftName, paint) {
 // Number badge: size, height above the fallback station, and offset toward the
 // line's end of the station (so lines sharing a station don't stack badges).
 const BADGE = 6, BADGE_Y = 14, BADGE_Z = 5;
-// How far a station is pulled back along its own line when the map data has two
-// lines meeting end to end (No. 1's top is No. 7's bottom): they're separate
-// stations on the mountain, back to back with a gap between.
-const STATION_PULL = 20;
+
+// Where each lift's stations stand (see world/stations.js, which the map data
+// uses too).
+export { liftStations };
 
 // `scale` sizes towers, cable height and cars; `stationScale` the buildings;
 // `spacing` multiplies the gap between cars; `speed` is the haul rope in m/s.
@@ -182,18 +183,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
   // Towers, arms and cars are instanced: there are hundreds of each.
   const towerMats = [], armMats = [];
   const _o = new THREE.Object3D();
-  const endKey = (p) => `${p[0]},${p[1]}`;
-  const ends = new Map();
-  for (const l of lifts) {
-    if (l.type === 'magic_carpet') continue;
-    for (const p of [l.points[0], l.points[l.points.length - 1]]) ends.set(endKey(p), (ends.get(endKey(p)) || 0) + 1);
-  }
-  const ownEnd = (p, toward) => {
-    if (ends.get(endKey(p)) < 2) return p;
-    const dx = toward[0] - p[0], dz = toward[1] - p[1], L = Math.hypot(dx, dz);
-    const d = STATION_PULL * stationScale;
-    return [p[0] + (dx / L) * d, p[1] + (dz / L) * d];
-  };
+  const stationsAt = liftStations(lifts, stationScale);
   const place = (list, x, y, z, ry, sx, sy = sx) => {
     _o.position.set(x, y, z);
     _o.rotation.set(0, ry, 0);
@@ -202,15 +192,14 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     list.push(_o.matrix.clone());
   };
 
-  for (const lift of lifts) {
+  for (const [li, lift] of lifts.entries()) {
     if (lift.type === 'magic_carpet') {
       const belt = magicCarpet(hf, lift, stationScale);
       group.add(belt.mesh);
       belts.push(belt);
       continue;
     }
-    const pts0 = lift.points, last = pts0.length - 1;
-    const a = ownEnd(pts0[0], pts0[1]), b = ownEnd(pts0[last], pts0[last - 1]);
+    const [a, b] = stationsAt[li];
     const A = new THREE.Vector3(a[0], hf.heightAt(a[0], a[1]), a[1]);
     const B = new THREE.Vector3(b[0], hf.heightAt(b[0], b[1]), b[1]);
     const dir = new THREE.Vector3(B.x - A.x, 0, B.z - A.z);

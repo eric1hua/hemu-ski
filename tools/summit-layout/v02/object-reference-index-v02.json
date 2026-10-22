@@ -1,0 +1,154 @@
+[
+  {
+    "number": 6,
+    "shapeId": "shape:PsY7rYqgdOW6zgTzIcV9T",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset-23989041.png",
+    "crop": null
+  },
+  {
+    "number": 9,
+    "shapeId": "shape:DN_w8aVT3MVM3Vty635zD",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset-352959172.jpg",
+    "crop": null
+  },
+  {
+    "number": 9,
+    "shapeId": "shape:T6vcWBpkRZkdSl871f7fs",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset-483397385.png",
+    "crop": {
+      "topLeft": {
+        "x": 0,
+        "y": 0.17968513837992037
+      },
+      "bottomRight": {
+        "x": 1,
+        "y": 0.837726299655639
+      }
+    }
+  },
+  {
+    "number": 9,
+    "shapeId": "shape:nhhj3E177AZ2lT70HjqM-",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset--1972942376.png",
+    "crop": {
+      "topLeft": {
+        "x": 0,
+        "y": 0.0016689720396780424
+      },
+      "bottomRight": {
+        "x": 1,
+        "y": 0.8048768702530593
+      }
+    }
+  },
+  {
+    "number": 7,
+    "shapeId": "shape:4sir-ZVUN89p8Go6VaQiW",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset--2129279090.jpg",
+    "crop": {
+      "topLeft": {
+        "x": 0.3432010666122083,
+        "y": 0.4226086038083947
+      },
+      "bottomRight": {
+        "x": 0.754920846951516,
+        "y": 0.997053772891205
+      },
+      "isCircle": false
+    }
+  },
+  {
+    "number": 7,
+    "shapeId": "shape:oRBS43Ny5Y2bM7EtNMBzY",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset-1522671474.jpg",
+    "crop": null
+  },
+  {
+    "number": 3,
+    "shapeId": "shape:cRgd6g8ekVKy7fKABqVrW",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset-401614527.png",
+    "crop": {
+      "topLeft": {
+        "x": 0,
+        "y": 0.06243280766081659
+      },
+      "bottomRight": {
+        "x": 1,
+        "y": 0.7943113452707272
+      }
+    }
+  },
+  {
+    "number": 3,
+    "shapeId": "shape:OswiZjdo34gq_dZBv_hDY",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset-39571063.webp",
+    "crop": {
+      "topLeft": {
+        "x": 0.20406271969709777,
+        "y": 0.2717220378784796
+      },
+      "bottomRight": {
+        "x": 0.6702172401789886,
+        "y": 0.7837744561231604
+      }
+    }
+  },
+  {
+    "number": 3,
+    "shapeId": "shape:37glDdcUlwto3V0BFrzpO",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset--1854995187.webp",
+    "crop": null
+  },
+  {
+    "number": 2,
+    "shapeId": "shape:A8dqgliU4w_p4HI9bWJZq",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset--462692548.png",
+    "crop": {
+      "topLeft": {
+        "x": 0.03898690317617154,
+        "y": 0.24159250372673952
+      },
+      "bottomRight": {
+        "x": 0.9610130968238283,
+        "y": 0.795146162563359
+      },
+      "isCircle": false
+    }
+  },
+  {
+    "number": 2,
+    "shapeId": "shape:mhqboC9_Bu5h_ttoBKbGo",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset--519019639.png",
+    "crop": null
+  },
+  {
+    "number": 8,
+    "shapeId": "shape:mBlzJK5zawGe7hBWON8BJ",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset-1671878101.jpg",
+    "crop": {
+      "topLeft": {
+        "x": 0.2020824959807074,
+        "y": 0.07710302220648724
+      },
+      "bottomRight": {
+        "x": 0.8370511789924974,
+        "y": 1
+      }
+    }
+  },
+  {
+    "number": 4,
+    "shapeId": "shape:7CfcT6ibBQGPCtNgLtBsa",
+    "path": "/Users/erichua/Developer/threejs-game-dev/canvas/pages/ApwypO47DueJozzQFxZIw/assets/asset-39571063.webp",
+    "crop": {
+      "topLeft": {
+        "x": 0.5922700926970137,
+        "y": 0.16450422279137267
+      },
+      "bottomRight": {
+        "x": 0.8522559388349408,
+        "y": 0.5066855478550314
+      }
+    }
+  }
+]

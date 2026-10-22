@@ -1,0 +1,681 @@
+{
+  "version": "v03",
+  "sourcePageId": "page:ApwypO47DueJozzQFxZIw",
+  "sourceRevision": "17cb807cd2df6ec78d9422b3ff95145fc07fe4dcf969a383f5e913576466f006",
+  "coordinates": "Normalized source-image pixels; not orthographic ground coordinates or world positions.",
+  "views": [
+    {
+      "view": "A",
+      "title": "夏季俯拍 · 站区主定位",
+      "shapeId": "shape:9o1i2eJCM-Lz5D55oEQcb",
+      "file": "asset--2127530644.jpg",
+      "crop": {
+        "topLeft": {
+          "x": 0,
+          "y": 0
+        },
+        "bottomRight": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "pins": [
+        {
+          "label": "2",
+          "arrowId": "shape:3iU3-qns8t7HcbIpkgZG3",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.4275590743479169,
+            0.5377050630982965
+          ],
+          "sourceUV": [
+            0.4275590743479169,
+            0.5377050630982965
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "6",
+          "arrowId": "shape:qRJkSgHQkSHaJZOkhN4jb",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.3673785739255434,
+            0.5988193197468858
+          ],
+          "sourceUV": [
+            0.3673785739255434,
+            0.5988193197468858
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "G6",
+          "arrowId": "shape:VHH0DRTL3Qzn84kSSKFmS",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.5076310350161953,
+            0.5905420173015359
+          ],
+          "sourceUV": [
+            0.5076310350161953,
+            0.5905420173015359
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "7",
+          "arrowId": "shape:fmrRYBsx8QjiJEQdYfK8T",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.3812529033665725,
+            0.8679617984193088
+          ],
+          "sourceUV": [
+            0.3812529033665725,
+            0.8679617984193088
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "5",
+          "arrowId": "shape:M5e_BekBGqFn302Gj9l29",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.46171266078182105,
+            0.6968039041908094
+          ],
+          "sourceUV": [
+            0.46171266078182105,
+            0.6968039041908094
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "1",
+          "arrowId": "shape:aHehnkHSVlB6r4x4HJtTh",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.2999572580889996,
+            0.6037810312197001
+          ],
+          "sourceUV": [
+            0.2999572580889996,
+            0.6037810312197001
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "8",
+          "arrowId": "shape:wpJrBoKVzOY8VTEoVUjsJ",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.39609305719730614,
+            0.48890509177350094
+          ],
+          "sourceUV": [
+            0.39609305719730614,
+            0.48890509177350094
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "G7",
+          "arrowId": "shape:ZO1cy7L9s7XS6u_CXQmUf",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.3470565754360548,
+            0.513400851315724
+          ],
+          "sourceUV": [
+            0.3470565754360548,
+            0.513400851315724
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "4",
+          "arrowId": "shape:mEM9sCVth22Npl1ehWO9T",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.6704769987217537,
+            0.7172944080434417
+          ],
+          "sourceUV": [
+            0.6704769987217537,
+            0.7172944080434417
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "3",
+          "arrowId": "shape:nMLEjEFSx5fGJWM4uAOBd",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.564533562731069,
+            0.6639339374700399
+          ],
+          "sourceUV": [
+            0.564533562731069,
+            0.6639339374700399
+          ],
+          "status": "source-annotated"
+        }
+      ]
+    },
+    {
+      "view": "B",
+      "title": "夏季斜视 · 前后与朝向校核",
+      "shapeId": "shape:yDBsS0IR-SWCpyx5i7AG7",
+      "file": "asset--1471199125.jpg",
+      "crop": {
+        "topLeft": {
+          "x": 0,
+          "y": 0
+        },
+        "bottomRight": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "pins": [
+        {
+          "label": "6",
+          "arrowId": "shape:ETLltk9T5_7PMMnQhT8Cx",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.5782613072254308,
+            0.592466668745913
+          ],
+          "sourceUV": [
+            0.5782613072254308,
+            0.592466668745913
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "G6",
+          "arrowId": "shape:_QJWoR4MnzooDVDvBSlnX",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.14218038039380199,
+            0.6235796254070819
+          ],
+          "sourceUV": [
+            0.14218038039380199,
+            0.6235796254070819
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "1",
+          "arrowId": "shape:7Pd1npFmcmhB7V_6DZQf4",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.8318434971423,
+            0.605384121153257
+          ],
+          "sourceUV": [
+            0.8318434971423,
+            0.605384121153257
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "5",
+          "arrowId": "shape:Ds7Cd0503T3mlaQcaP81n",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.3659519526950958,
+            0.508096789916089
+          ],
+          "sourceUV": [
+            0.3659519526950958,
+            0.508096789916089
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "3",
+          "arrowId": "shape:K1f6JzV5-96hUr3zFhuqm",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.15998764169105828,
+            0.48470557193171954
+          ],
+          "sourceUV": [
+            0.15998764169105828,
+            0.48470557193171954
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "8",
+          "arrowId": "shape:0A14jaJNMTlfgsCpvGA1Y",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.4876898227172946,
+            0.6695513491694374
+          ],
+          "sourceUV": [
+            0.4876898227172946,
+            0.6695513491694374
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "2",
+          "arrowId": "shape:FFXnS7jOfY02ylEO21N2g",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.40286610137629303,
+            0.6310889707082845
+          ],
+          "sourceUV": [
+            0.40286610137629303,
+            0.6310889707082845
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "7",
+          "arrowId": "shape:etHwzgVK-Ui8nbzkmHNhF",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.6073264410657748,
+            0.559483917428677
+          ],
+          "sourceUV": [
+            0.6073264410657748,
+            0.559483917428677
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "G7",
+          "arrowId": "shape:_nZMM51JDuwkEyyiYaK-M",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.5868098954355022,
+            0.7533448103826988
+          ],
+          "sourceUV": [
+            0.5868098954355022,
+            0.7533448103826988
+          ],
+          "status": "source-annotated"
+        }
+      ]
+    },
+    {
+      "view": "C",
+      "title": "冬季反向 · 高差与对应关系校核",
+      "shapeId": "shape:f4Cd84sY31U6KS_ifR5jA",
+      "file": "asset--1407903703.webp",
+      "crop": {
+        "topLeft": {
+          "x": 0,
+          "y": 0
+        },
+        "bottomRight": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "pins": [
+        {
+          "label": "3",
+          "arrowId": "shape:oSUKi5BXWPf3BXfPmTzo9",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.5882720265160353,
+            0.4415656424589817
+          ],
+          "sourceUV": [
+            0.5882720265160353,
+            0.4415656424589817
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "8",
+          "arrowId": "shape:P07eSlaFgUmMZVHdBWG53",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.3207490722669482,
+            0.5088657585078413
+          ],
+          "sourceUV": [
+            0.3207490722669482,
+            0.5088657585078413
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "G7",
+          "arrowId": "shape:vk5mxvdonFvSDZGJQMF61",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.2512265983775267,
+            0.6087889913088124
+          ],
+          "sourceUV": [
+            0.2512265983775267,
+            0.6087889913088124
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "5",
+          "arrowId": "shape:kZZy_D-_EO26eGqhwmu4b",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.6175038062660585,
+            0.5062985159165319
+          ],
+          "sourceUV": [
+            0.6175038062660585,
+            0.5062985159165319
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "G6",
+          "arrowId": "shape:vPHv6w_ZK1ZqntD7KTaUZ",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.5057056969906846,
+            0.47771498741671425
+          ],
+          "sourceUV": [
+            0.5057056969906846,
+            0.47771498741671425
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "1",
+          "arrowId": "shape:vTKwf8di0nbiLJvrjqRQI",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.43848508254656066,
+            0.7265431762186579
+          ],
+          "sourceUV": [
+            0.43848508254656066,
+            0.7265431762186579
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "6",
+          "arrowId": "shape:HgXqtJdgzMPiF8Rff5i4b",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.7757326616570146,
+            0.577354735520879
+          ],
+          "sourceUV": [
+            0.7757326616570146,
+            0.577354735520879
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "7",
+          "arrowId": "shape:hc86LpWjB5exqgcpikdHJ",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.9127580822511148,
+            0.7630282777442868
+          ],
+          "sourceUV": [
+            0.9127580822511148,
+            0.7630282777442868
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "4",
+          "arrowId": "shape:31HprShVeCuSHHB8744Kj",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.6184155613997901,
+            0.3498036922858369
+          ],
+          "sourceUV": [
+            0.6184155613997901,
+            0.3498036922858369
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "2",
+          "arrowId": "shape:uJU2HkM7tfnBXThkJkPhq",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.39720617880162284,
+            0.47518056518197394
+          ],
+          "sourceUV": [
+            0.39720617880162284,
+            0.47518056518197394
+          ],
+          "status": "source-annotated"
+        }
+      ]
+    },
+    {
+      "view": "D",
+      "title": "冬季航拍 · 扩展区与9号定位",
+      "shapeId": "shape:RfsvqorpGtAjIcjak0wgp",
+      "file": "asset-2098789449.png",
+      "crop": {
+        "topLeft": {
+          "x": 0.1004618937644342,
+          "y": 0
+        },
+        "bottomRight": {
+          "x": 0.8984555427251734,
+          "y": 1
+        }
+      },
+      "pins": [
+        {
+          "label": "G6",
+          "arrowId": "shape:MKjt82Wxjdiv8jX8GgStZ",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.3485827779262967,
+            0.6631977415499155
+          ],
+          "sourceUV": [
+            0.3786287366867107,
+            0.6631977415499155
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "3",
+          "arrowId": "shape:c58KpAYszJouFJ1Z75vTn",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.2316814522683617,
+            0.5441250213368414
+          ],
+          "sourceUV": [
+            0.2853422212565875,
+            0.5441250213368414
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "8",
+          "arrowId": "shape:0jRSXZtUF5_jY_tZdE33d",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.5383644264594888,
+            0.7115723258356287
+          ],
+          "sourceUV": [
+            0.5300732869054972,
+            0.7115723258356287
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "5",
+          "arrowId": "shape:CRNbmiJDFy3l9fyXC0d53",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.37574004354379514,
+            0.5113568083181242
+          ],
+          "sourceUV": [
+            0.40030006217261427,
+            0.5113568083181242
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "9",
+          "arrowId": "shape:7hT7IXdhGpWLpcdmAQ2RU",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.5248078813010799,
+            0.2478684629475377
+          ],
+          "sourceUV": [
+            0.5192552499672374,
+            0.2478684629475377
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "1",
+          "arrowId": "shape:xoUMLCdfJ6wyLoNQlJWxF",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.6284442313818165,
+            0.5234242077469317
+          ],
+          "sourceUV": [
+            0.6019563991331369,
+            0.5234242077469317
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "7",
+          "arrowId": "shape:WwZXQ5M7p58K_cPbFknT9",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.43706530607539146,
+            0.3552220884925605
+          ],
+          "sourceUV": [
+            0.4492372321936781,
+            0.3552220884925605
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "G7",
+          "arrowId": "shape:Ac3O21CP5CVcnsX4lyP1I",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.6848765047071288,
+            0.782066075817763
+          ],
+          "sourceUV": [
+            0.6469889948431526,
+            0.782066075817763
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "2",
+          "arrowId": "shape:HECnqgduLYmVky2tZ6MOI",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.46833035423350444,
+            0.6939937369397786
+          ],
+          "sourceUV": [
+            0.47418654205830396,
+            0.6939937369397786
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "label": "4",
+          "arrowId": "shape:oZqxWgTPgLAkLY5SBYFhH",
+          "origin": "user-arrow-endpoint",
+          "displayUV": [
+            0.020568229237518318,
+            0.5563897825859672
+          ],
+          "sourceUV": [
+            0.11687521006634241,
+            0.5563897825859672
+          ],
+          "status": "source-annotated"
+        }
+      ]
+    }
+  ],
+  "manualVisibleFeatures": [
+    {
+      "view": "D",
+      "label": "6?",
+      "sourceUV": [
+        0.33387329013678907,
+        0.4273753894080997
+      ],
+      "status": "candidate-only",
+      "origin": "visual-feature-pick",
+      "note": "Visible wooden frame left of mast; not user-confirmed cross-view identity."
+    },
+    {
+      "view": "D",
+      "label": "9a",
+      "sourceUV": [
+        0.5228581713462923,
+        0.24824766355140188
+      ],
+      "status": "visible-instance-center",
+      "origin": "visual-feature-pick"
+    },
+    {
+      "view": "D",
+      "label": "9b",
+      "sourceUV": [
+        0.544906407487401,
+        0.23121105919003115
+      ],
+      "status": "visible-instance-center",
+      "origin": "visual-feature-pick"
+    },
+    {
+      "view": "D",
+      "label": "9c",
+      "sourceUV": [
+        0.6420986321094313,
+        0.2691783489096573
+      ],
+      "status": "visible-instance-center",
+      "origin": "visual-feature-pick"
+    }
+  ],
+  "primaryReferences": {
+    "1": "A",
+    "2": "A",
+    "3": "A; B,C,D cross-check category area; individual three set centers not recovered",
+    "4": "A",
+    "5": "A",
+    "6": "A: explicitly chosen by user as primary; B/C cross-check; D visible identity candidate",
+    "7": "A and D",
+    "8": "A and B",
+    "9": "D; source arrow marks category, manual picks distinguish three visible pods"
+  },
+  "forbiddenPlacementSource": "summit-overview-art-v02.png: user rejected spatial layout"
+}

@@ -1,0 +1,510 @@
+{
+  "version": "v04",
+  "scope": "planning only",
+  "sourcePageId": "page:ApwypO47DueJozzQFxZIw",
+  "sourceRevision": "892a9547afb95dc4abea8fd3eef046ba1e365dbefa75356c3e0b907f0871cc1f",
+  "sourcePriority": "User source arrows/photos and explicit conflict decisions only; rejected v02 AI overview forbidden for placement.",
+  "objects": [
+    {
+      "id": "summit:object-1",
+      "number": 1,
+      "name": "传统蒙古包",
+      "instanceCount": 1,
+      "placeholder": "cylinder wall + shallow conical roof",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [],
+      "imagePlanePins": [
+        {
+          "view": "A",
+          "arrowId": "shape:aHehnkHSVlB6r4x4HJtTh",
+          "sourceUV": [
+            0.2999572580889996,
+            0.6037810312197001
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "B",
+          "arrowId": "shape:7Pd1npFmcmhB7V_6DZQf4",
+          "sourceUV": [
+            0.8318434971423,
+            0.605384121153257
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "C",
+          "arrowId": "shape:vTKwf8di0nbiLJvrjqRQI",
+          "sourceUV": [
+            0.43848508254656066,
+            0.7265431762186579
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "D",
+          "arrowId": "shape:xoUMLCdfJ6wyLoNQlJWxF",
+          "sourceUV": [
+            0.6019563991331369,
+            0.5234242077469317
+          ],
+          "status": "source-annotated"
+        }
+      ],
+      "placementRule": "A：G7外侧、6号旁；D：G7后侧雪包"
+    },
+    {
+      "id": "summit:object-2",
+      "number": 2,
+      "name": "一眼望四国路牌",
+      "instanceCount": 1,
+      "placeholder": "central timber + splayed braces + arrow boards",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [
+        "shape:A8dqgliU4w_p4HI9bWJZq",
+        "shape:mhqboC9_Bu5h_ttoBKbGo"
+      ],
+      "imagePlanePins": [
+        {
+          "view": "A",
+          "arrowId": "shape:3iU3-qns8t7HcbIpkgZG3",
+          "sourceUV": [
+            0.4275590743479169,
+            0.5377050630982965
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "B",
+          "arrowId": "shape:FFXnS7jOfY02ylEO21N2g",
+          "sourceUV": [
+            0.40286610137629303,
+            0.6310889707082845
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "C",
+          "arrowId": "shape:uJU2HkM7tfnBXThkJkPhq",
+          "sourceUV": [
+            0.39720617880162284,
+            0.47518056518197394
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "D",
+          "arrowId": "shape:HECnqgduLYmVky2tZ6MOI",
+          "sourceUV": [
+            0.47418654205830396,
+            0.6939937369397786
+          ],
+          "status": "source-annotated"
+        }
+      ],
+      "placementRule": "A：两站之间，8与6之间；D：中央通行面"
+    },
+    {
+      "id": "summit:object-3",
+      "number": 3,
+      "name": "转经轮",
+      "instanceCount": 3,
+      "placeholder": "per set: red timber shelter + 7 upright golden cylinders",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [
+        "shape:cRgd6g8ekVKy7fKABqVrW",
+        "shape:OswiZjdo34gq_dZBv_hDY",
+        "shape:37glDdcUlwto3V0BFrzpO"
+      ],
+      "imagePlanePins": [
+        {
+          "view": "A",
+          "arrowId": "shape:nMLEjEFSx5fGJWM4uAOBd",
+          "sourceUV": [
+            0.564533562731069,
+            0.6639339374700399
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "B",
+          "arrowId": "shape:K1f6JzV5-96hUr3zFhuqm",
+          "sourceUV": [
+            0.15998764169105828,
+            0.48470557193171954
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "C",
+          "arrowId": "shape:oSUKi5BXWPf3BXfPmTzo9",
+          "sourceUV": [
+            0.5882720265160353,
+            0.4415656424589817
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "D",
+          "arrowId": "shape:c58KpAYszJouFJ1Z75vTn",
+          "sourceUV": [
+            0.2853422212565875,
+            0.5441250213368414
+          ],
+          "status": "source-annotated"
+        }
+      ],
+      "wheelsPerInstance": 7,
+      "totalWheels": 21,
+      "instanceIds": [
+        "summit:object-3-set-1",
+        "summit:object-3-set-2",
+        "summit:object-3-set-3"
+      ],
+      "placementRule": "A：G6与敖包4之间的连接段；3组不能合成一个空棚"
+    },
+    {
+      "id": "summit:object-4",
+      "number": 4,
+      "name": "敖包与经幡",
+      "instanceCount": 1,
+      "placeholder": "3 decreasing circular stone tiers + steps + pole + ribbons",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [
+        "shape:7CfcT6ibBQGPCtNgLtBsa"
+      ],
+      "imagePlanePins": [
+        {
+          "view": "A",
+          "arrowId": "shape:mEM9sCVth22Npl1ehWO9T",
+          "sourceUV": [
+            0.6704769987217537,
+            0.7172944080434417
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "C",
+          "arrowId": "shape:31HprShVeCuSHHB8744Kj",
+          "sourceUV": [
+            0.6184155613997901,
+            0.3498036922858369
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "D",
+          "arrowId": "shape:oZqxWgTPgLAkLY5SBYFhH",
+          "sourceUV": [
+            0.11687521006634241,
+            0.5563897825859672
+          ],
+          "status": "source-annotated"
+        }
+      ],
+      "placementRule": "A：G6另一侧的步道端头；D：画面最左端，局部出画"
+    },
+    {
+      "id": "summit:object-5",
+      "number": 5,
+      "name": "小木屋",
+      "instanceCount": 1,
+      "placeholder": "small box + gable; function unknown",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [],
+      "imagePlanePins": [
+        {
+          "view": "A",
+          "arrowId": "shape:M5e_BekBGqFn302Gj9l29",
+          "sourceUV": [
+            0.46171266078182105,
+            0.6968039041908094
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "B",
+          "arrowId": "shape:Ds7Cd0503T3mlaQcaP81n",
+          "sourceUV": [
+            0.3659519526950958,
+            0.508096789916089
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "C",
+          "arrowId": "shape:kZZy_D-_EO26eGqhwmu4b",
+          "sourceUV": [
+            0.6175038062660585,
+            0.5062985159165319
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "D",
+          "arrowId": "shape:CRNbmiJDFy3l9fyXC0d53",
+          "sourceUV": [
+            0.40030006217261427,
+            0.5113568083181242
+          ],
+          "status": "source-annotated"
+        }
+      ],
+      "placementRule": "A：G6外侧、通信杆脚旁；D：G6后方木屋"
+    },
+    {
+      "id": "summit:object-6",
+      "number": 6,
+      "name": "巨型木相框",
+      "instanceCount": 1,
+      "placeholder": "complete open rectangular frame + angled feet",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [
+        "shape:PsY7rYqgdOW6zgTzIcV9T"
+      ],
+      "imagePlanePins": [
+        {
+          "view": "A",
+          "arrowId": "shape:qRJkSgHQkSHaJZOkhN4jb",
+          "sourceUV": [
+            0.3673785739255434,
+            0.5988193197468858
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "B",
+          "arrowId": "shape:ETLltk9T5_7PMMnQhT8Cx",
+          "sourceUV": [
+            0.5782613072254308,
+            0.592466668745913
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "C",
+          "arrowId": "shape:fmefHkubp-_X-f4lMY4QT",
+          "sourceUV": [
+            0.49727880624014165,
+            0.5811999385908777
+          ],
+          "status": "user-explicit-location"
+        },
+        {
+          "view": "D",
+          "arrowId": "shape:44uhE-J7LYb5p1bCXECUs",
+          "sourceUV": [
+            0.5127659574856094,
+            0.532009980099031
+          ],
+          "status": "user-explicit-location"
+        }
+      ],
+      "placementRule": "D：按用户新箭头，在1左侧、2/8上方；C也已按新箭头改正",
+      "primaryReferenceDecision": {
+        "views": [
+          "D",
+          "C"
+        ],
+        "by": "user",
+        "instruction": "Use latest explicit user arrows on v03 boards, recovered to source-image UV. A remains summer context. Reject old D 6? candidate and old C endpoint. Do not duplicate."
+      }
+    },
+    {
+      "id": "summit:object-7",
+      "number": 7,
+      "name": "咖啡小屋",
+      "instanceCount": 1,
+      "placeholder": "compact pale log walls + overlapping steep gables",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [
+        "shape:4sir-ZVUN89p8Go6VaQiW",
+        "shape:oRBS43Ny5Y2bM7EtNMBzY"
+      ],
+      "imagePlanePins": [
+        {
+          "view": "A",
+          "arrowId": "shape:fmrRYBsx8QjiJEQdYfK8T",
+          "sourceUV": [
+            0.3812529033665725,
+            0.8679617984193088
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "B",
+          "arrowId": "shape:etHwzgVK-Ui8nbzkmHNhF",
+          "sourceUV": [
+            0.6073264410657748,
+            0.559483917428677
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "C",
+          "arrowId": "shape:hc86LpWjB5exqgcpikdHJ",
+          "sourceUV": [
+            0.9127580822511148,
+            0.7630282777442868
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "D",
+          "arrowId": "shape:WwZXQ5M7p58K_cPbFknT9",
+          "sourceUV": [
+            0.4492372321936781,
+            0.3552220884925605
+          ],
+          "status": "source-annotated"
+        }
+      ],
+      "placementRule": "A：下缘外侧平台；D：通信杆后方雪肩；不是独立高山顶"
+    },
+    {
+      "id": "summit:object-8",
+      "number": 8,
+      "name": "双座秋千",
+      "instanceCount": 1,
+      "placeholder": "2 straight vertical timber posts + horizontal beam + 2 suspended seats",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [
+        "shape:mBlzJK5zawGe7hBWON8BJ"
+      ],
+      "imagePlanePins": [
+        {
+          "view": "A",
+          "arrowId": "shape:wpJrBoKVzOY8VTEoVUjsJ",
+          "sourceUV": [
+            0.39609305719730614,
+            0.48890509177350094
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "B",
+          "arrowId": "shape:0A14jaJNMTlfgsCpvGA1Y",
+          "sourceUV": [
+            0.4876898227172946,
+            0.6695513491694374
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "C",
+          "arrowId": "shape:P07eSlaFgUmMZVHdBWG53",
+          "sourceUV": [
+            0.3207490722669482,
+            0.5088657585078413
+          ],
+          "status": "source-annotated"
+        },
+        {
+          "view": "D",
+          "arrowId": "shape:0jRSXZtUF5_jY_tZdE33d",
+          "sourceUV": [
+            0.5300732869054972,
+            0.7115723258356287
+          ],
+          "status": "source-annotated"
+        }
+      ],
+      "seats": 2,
+      "placementRule": "A：G7靠2的一侧；B：G7口外中央侧；两座板"
+    },
+    {
+      "id": "summit:object-9",
+      "number": 9,
+      "name": "现代穹顶帐篷",
+      "instanceCount": 3,
+      "placeholder": "orange geodesic shell + dark triangular glazing + raised legs + access ladder",
+      "worldPosition": null,
+      "yawRadians": null,
+      "modelUrl": null,
+      "referenceShapeIds": [
+        "shape:DN_w8aVT3MVM3Vty635zD",
+        "shape:T6vcWBpkRZkdSl871f7fs",
+        "shape:nhhj3E177AZ2lT70HjqM-"
+      ],
+      "imagePlanePins": [
+        {
+          "view": "D",
+          "arrowId": "shape:7hT7IXdhGpWLpcdmAQ2RU",
+          "sourceUV": [
+            0.5192552499672374,
+            0.2478684629475377
+          ],
+          "status": "source-annotated"
+        }
+      ],
+      "instanceIds": [
+        "summit:object-9-pod-1",
+        "summit:object-9-pod-2",
+        "summit:object-9-pod-3"
+      ],
+      "placementRule": "D：7号更远处的坡肩，9a/9b/9c三间；A未提供该区域落点",
+      "visibleInstanceCenters": [
+        {
+          "view": "D",
+          "label": "9a",
+          "sourceUV": [
+            0.5228581713462923,
+            0.24824766355140188
+          ],
+          "status": "visible-instance-center",
+          "origin": "visual-feature-pick"
+        },
+        {
+          "view": "D",
+          "label": "9b",
+          "sourceUV": [
+            0.544906407487401,
+            0.23121105919003115
+          ],
+          "status": "visible-instance-center",
+          "origin": "visual-feature-pick"
+        },
+        {
+          "view": "D",
+          "label": "9c",
+          "sourceUV": [
+            0.6420986321094313,
+            0.2691783489096573
+          ],
+          "status": "visible-instance-center",
+          "origin": "visual-feature-pick"
+        }
+      ]
+    }
+  ],
+  "separateLandmarks": [
+    "G6 upper terminal",
+    "G7 upper terminal",
+    "communications mast near object 5"
+  ],
+  "terrainZones": [
+    "connected station terrace",
+    "rounded knoll at object 1",
+    "narrow ridge toward prayer wheels and ovoo",
+    "outer shoulder toward coffee cabin",
+    "three separate pod footing pads along higher ridge"
+  ],
+  "coordinateStatus": "No world-coordinate calibration yet.",
+  "referencePins": "reference-pins-v04.json"
+}
