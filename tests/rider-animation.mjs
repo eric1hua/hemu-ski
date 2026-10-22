@@ -1,4 +1,4 @@
-// Run: node scripts/test-rider-animation.mjs
+// Run: npm test (node tests/rider-animation.mjs)
 // Uses the actual female GLB rigs/clips (ski gear and swimsuit); omits only texture material references
 // so the regression runs in Node without browser image loaders or a WebGL context.
 import assert from 'node:assert/strict';

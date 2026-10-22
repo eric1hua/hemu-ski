@@ -1,10 +1,10 @@
-// Dev-only inspection surface for the dog (dog-review.html): the same rig and
+// Dev-only inspection surface for the dog (tools/review/dog.html): the same rig and
 // body the game uses, on a grid, with every posture, gait and one-off on a button.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { InkPost } from '../render/post.js';
-import { loadDog, DogRig } from './rig.js';
-import { DogBody, POSTURES } from './body.js';
+import { InkPost } from '../../src/render/post.js';
+import { loadDog, DogRig } from '../../src/dog/rig.js';
+import { DogBody, POSTURES } from '../../src/dog/body.js';
 
 const SCALE = 1.3;
 const scene = new THREE.Scene();

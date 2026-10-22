@@ -2,8 +2,8 @@
 // tiles, the run centrelines and the changes to the forest, with undo/redo and
 // saving. The view listens
 // through `onChange` and redraws whatever a change touched.
-import { encodeHeights, EDITS_DIR } from '../world/data.js';
-import { GAME_FOREST } from '../world/trees.js';
+import { encodeHeights, EDITS_DIR } from '../../src/world/data.js';
+import { GAME_FOREST } from '../../src/world/trees.js';
 
 const smoothstep = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 

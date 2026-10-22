@@ -4,8 +4,8 @@
 // redone where the ground or a run changed (all of it for holes or a new
 // density); removing and planting only re-apply the edits.
 import * as THREE from 'three';
-import { PisteField } from '../world/data.js';
-import { forestSpots, applyTreeEdits, GAME_FOREST } from '../world/trees.js';
+import { PisteField } from '../../src/world/data.js';
+import { forestSpots, applyTreeEdits, GAME_FOREST } from '../../src/world/trees.js';
 
 const COLORS = {
   tree: new THREE.Color('#3f6b55'),

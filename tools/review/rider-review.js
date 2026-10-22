@@ -1,8 +1,8 @@
 // Dev-only inspection surface, using the same Rider/IK/mixer as the game.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { InkPost } from '../render/post.js';
-import { Rider } from './rider.js';
+import { InkPost } from '../../src/render/post.js';
+import { Rider } from '../../src/player/rider.js';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#e7edf0');
 const renderer = new THREE.WebGLRenderer({ antialias: true });

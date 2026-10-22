@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "fetch-data": "node scripts/fetch-data.mjs"
+    "fetch-data": "node tools/terrain/fetch-data.mjs",
+    "test": "node tests/rider-animation.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

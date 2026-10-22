@@ -8,7 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PNG } from 'pngjs';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
 const CACHE = path.join(ROOT, '.cache');
 const DIORAMA_MODE = process.argv[2] === 'diorama';
 const OUT = path.join(ROOT, DIORAMA_MODE ? 'public/data/diorama' : 'public/data');

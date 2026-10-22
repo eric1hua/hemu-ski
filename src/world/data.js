@@ -1,4 +1,4 @@
-// Loads the baked world (see scripts/fetch-data.mjs) and provides sampling helpers.
+// Loads the baked world (see tools/terrain/fetch-data.mjs) and provides sampling helpers.
 import * as THREE from 'three';
 
 const BASE = import.meta.env.BASE_URL + 'data/';
@@ -11,7 +11,7 @@ function decode(buf, { min, max }) {
   return out;
 }
 
-// Map-editor saves (see src/editor/) live beside the bake, in public/data/edits/.
+// Map-editor saves (see tools/map-editor/) live beside the bake, in public/data/edits/.
 export const EDITS_DIR = 'edits/';
 // The editor's tile: 10 heightfield cells, 80 m on the game's 8 m grid.
 export const TILE_CELLS = 10;

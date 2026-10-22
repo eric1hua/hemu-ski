@@ -204,7 +204,7 @@ with `npm run fetch-data -- diorama`.
 
 ## Map editor
 
-`npm run dev`, then open `/editor.html`: a working view of the game's map for
+`npm run dev`, then open `/tools/map-editor/`: a working view of the game's map for
 reshaping it. The map is cut into 80 m tiles (10 × 10 heightfield cells).
 
 - **Tiles** (T): click a tile or drag a box (Shift adds, Alt takes away), then
@@ -250,7 +250,7 @@ edits were saved.
 
 ## How it's built
 
-- `scripts/fetch-data.mjs` bakes the world into `public/data/`:
+- `tools/terrain/fetch-data.mjs` bakes the world into `public/data/`:
   elevation from AWS Terrain Tiles (Terrarium, z14 for the 7.2 km play area,
   z11 for the 40 km horizon), plus pistes and lifts from OpenStreetMap via
   Overpass. Re-run with `npm run fetch-data` (it caches into `.cache/`).

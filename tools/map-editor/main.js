@@ -4,9 +4,9 @@
 // game picks them up on its next load.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadWorld, PISTE_HALF_WIDTH } from '../world/data.js';
-import { createBackdrop } from '../world/terrain.js';
-import { SKY } from '../world/sky.js';
+import { loadWorld, PISTE_HALF_WIDTH } from '../../src/world/data.js';
+import { createBackdrop } from '../../src/world/terrain.js';
+import { SKY } from '../../src/world/sky.js';
 import { EditMap } from './map.js';
 import { TerrainView } from './terrain-view.js';
 import { RunsView, DIFF_COLORS } from './runs-view.js';

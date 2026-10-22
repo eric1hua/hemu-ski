@@ -15,4 +15,4 @@ Rigify's second half of each limb bone (`thigh.001` and so on) carries no weight
 
 The game poses the dog in code each frame (`src/dog/rig.js`, `body.js`): no clips. The source .blend's five clips (walk, run, sit, look up and wag, lie down) are on the original Tripo skeleton, not this one, and aren't used. Folding the hind legs far (sitting, lying down) stretches the fur a little at the hips, as it does in Blender.
 
-Dev inspection: `/dog-review.html` (dev server only) shows the same rig and body on a grid, with every posture, gait speed and one-off on a button and the head, tail, mouth and mood on sliders.
+Dev inspection: `/tools/review/dog.html` (dev server only) shows the same rig and body on a grid, with every posture, gait speed and one-off on a button and the head, tail, mouth and mood on sliders.
