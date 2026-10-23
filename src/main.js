@@ -8,6 +8,7 @@ import { createSky, SKY } from './world/sky.js';
 import { createOnsen, PUFF_COVER } from './world/onsen.js';
 import { shapeSummit, createSummit, cabinSpace } from './world/summit.js';
 import { SUMMIT } from './world/summit-layout.js';
+import { shapeLakes, createLakes, shoreAt, overWater, Ripples } from './world/lakes.js';
 import { PrayerWheels } from './world/prayer-wheels.js';
 import { Dog, DOG } from './dog/dog.js';
 import { THROW } from './player/throw.js';
@@ -21,6 +22,8 @@ import { Snowmobile } from './vehicle/snowmobile.js';
 import { VehiclePhysics, PICKUP, SNOWMOBILE } from './vehicle/physics.js';
 import { Jetson } from './vehicle/jetson.js';
 import { FlightPhysics, JETSON } from './vehicle/flight.js';
+import { Rowboat } from './vehicle/rowboat.js';
+import { RowingPhysics, ROWBOAT } from './vehicle/rowing.js';
 import { Hud } from './hud.js';
 import { BigMap } from './bigmap.js';
 import { Navigator } from './gps/navigator.js';
@@ -87,6 +90,8 @@ const detail = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lif
 // The summit round the top of 6号 and 7号 is shaped for its landmarks (see
 // world/summit.js), before anything is set on the ground.
 shapeSummit(detail, meta.lifts);
+// Cloud Lake is open water, the ground shaped to its bed and banks (see world/lakes.js).
+const lakes = shapeLakes(detail, meta.lakes);
 const mainRun = meta.runs.find((r) => r.name === MAIN_RUN);
 
 // The ride area runs from the summit down the valley to both service centres.
@@ -106,6 +111,10 @@ scene.add(onsen.group);
 // The summit's landmarks, for now stand-ins; ?labels shows their numbers.
 const summit = createSummit(detail, { labels: new URLSearchParams(location.search).has('labels') });
 scene.add(summit.group);
+// The lakes' water, and the rings that spread on it from the boat's oars.
+const water = createLakes(lakes);
+const ripples = new Ripples();
+scene.add(water.group, ripples.group);
 const cabinRoom = cabinSpace(summit.byId.get('summit:object-7')); // the coffee cabin's room, for the dog's home and the camera
 scene.add(createPisteMarkers(detail, meta.runs));
 const sky = createSky();
@@ -162,14 +171,14 @@ scene.add(cabin);
 // ?rider=female/male/classic.
 const rider = new Rider({ model: false });
 scene.add(rider.root);
-const phys = new BoardPhysics({ hf: detail, piste, forest, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints, ...summit.footprints] });
+const phys = new BoardPhysics({ hf: detail, piste, forest, lakes, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints, ...summit.footprints] });
 const trail = new BoardTrail();
 const spray = new Spray();
 const powderSpray = new Spray(500, { size: 0.34, gravity: 4, life: 0.6 });
 const collar = new SnowCollar();
 scene.add(trail.mesh, spray.points, powderSpray.points, collar.mesh);
 let sink = 0; // how far the board rides down in the powder (see Powder, below)
-const hud = new Hud(world, piste);
+const hud = new Hud(world, piste, lakes);
 const sound = new Sound();
 const menu = createMenu(sound);
 // The GPS: pick a destination on the big map and it routes you there.
@@ -188,10 +197,33 @@ scene.add(marks.group);
 // it gets in (or on), E again gets out (see Driving). In the pickup the rider is
 // out of sight in the cab; on the snowmobile they sit on it, hands on the grips,
 // and in the Jetson they sit in its seat, hands on its two sticks.
+// On Cloud Lake there's a rowing boat, drawn up at the shore nearest a run (see
+// Rowing): the rider sits facing its stern, hands on the oars.
 const eastHall = SERVICE_CENTRES.find((c) => c.id === 'east');
 function parkedAt(name) {
   const { x, z, yaw } = placeOf(`vehicle:${name}`);
   return { x, z, dx: Math.sin(yaw), dz: Math.cos(yaw) };
+}
+// The boat's spot: afloat at the lake's edge where it comes nearest a run, its
+// stern to the bank and its bow to the water.
+const boatLake = lakes.find((l) => l.name === '云湖') ?? lakes[0] ?? null;
+function mooring(lake) {
+  // (The piste field only measures 60 m out; the runs are further than that.)
+  const toRuns = ([x, z]) => Math.min(...meta.runs.map(({ points: q }) => Math.min(...q.slice(1).map((b, i) => {
+    const a = q[i], dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = THREE.MathUtils.clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+    return Math.hypot(a[0] + dx * t - x, a[1] + dz * t - z);
+  }))));
+  let best = lake.outline[0], bestD = Infinity;
+  for (const p of lake.outline) {
+    const d = toRuns(p);
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  const cx = (lake.box[0] + lake.box[2]) / 2, cz = (lake.box[1] + lake.box[3]) / 2;
+  const to = Math.hypot(cx - best[0], cz - best[1]);
+  const { nx, nz } = shoreAt([lake], best[0] + (cx - best[0]) / to, best[1] + (cz - best[1]) / to, 5);
+  const off = 3.4 / 2 + 0.1; // half the hull, its stern just touching
+  return { x: best[0] - nx * off, z: best[1] - nz * off, dx: -nx, dz: -nz };
 }
 // `cam`: the chase camera's distance back, height and look-ahead, the height it
 // looks at, how far round to the side it hangs at a crawl (radians, + to the
@@ -226,6 +258,13 @@ const vehicles = [
       hint: 'The stick flies and turns · hold Up to climb, Down to land', hintLanded: 'Hold Up to take off',
     },
   },
+  ...(boatLake ? [{
+    name: 'rowboat', model: new Rowboat(), handling: ROWBOAT, floats: true, lake: boatLake, park: mooring(boatLake), home: boatLake.name,
+    cam: { back: 6, up: 2.5, ahead: 2.5, look: 0.6, side: 0.5, follow: 3 }, wind: 0.6, lean: 0.01,
+    title: 'Rowing boat', prompt: '<kbd>E</kbd> take the <b>rowing boat</b>',
+    hint: '<kbd>W</kbd> row · <kbd>S</kbd> back water · <kbd>A</kbd><kbd>D</kbd> turn · <kbd>Space</kbd> hold water · <kbd>E</kbd> step out at the shore',
+    touch: { prompt: 'Take the <b>rowing boat</b> ▸', enter: 'Row', exit: 'Step out', hint: 'Stick up to row, down to back water · sideways to turn' },
+  }] : []),
 ];
 const parked = () => vehicles.filter((v) => v.phys && v !== car).map((v) => v.model.footprint);
 for (const v of vehicles) {
@@ -235,8 +274,9 @@ for (const v of vehicles) {
   // (the Jetson leaves none).
   v.tracks = [];
   v.model.ready.then(() => {
-    v.phys = new (v.flies ? FlightPhysics : VehiclePhysics)({
-      hf: detail, piste, forest, dims: v.model.dims, handling: v.handling,
+    // The Jetson can come down on the water (but you can't get out there).
+    v.phys = new (v.flies ? FlightPhysics : v.floats ? RowingPhysics : VehiclePhysics)({
+      hf: v.flies ? overWater(detail, lakes) : detail, piste, forest, lakes, lake: v.lake, dims: v.model.dims, handling: v.handling,
       obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints, ...summit.footprints],
     });
     v.phys.reset(v.park.x, v.park.z, yawOf(v.park.dx, v.park.dz));
@@ -284,8 +324,8 @@ function act(code, repeat = false) {
   if (code === 'KeyM' && !repeat) openMap();
   if (code === 'KeyQ' && !repeat && state === 'ride') throwSnowball();
   if (code === 'KeyE' && !repeat && state === 'drive') {
-    if (car.phys.canExit === false) hud.toast(touch.on ? 'Land first · hold Down' : 'Land first · hold Shift', 1600);
-    else getOut();
+    if (car.phys.canExit === false) hud.toast(car.floats ? 'Row to the shore to step out' : touch.on ? 'Land first · hold Down' : 'Land first · hold Shift', 1600);
+    else if (!getOut()) hud.toast(car.floats ? 'Row to the shore to step out' : 'Not over the water', 1600);
   }
   else if (code === 'KeyE' && !repeat && state === 'soak') leavePool();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearCar) getIn(nearCar);
@@ -820,18 +860,20 @@ function frame() {
     for (const ev of drive.events.splice(0)) {
       if (ev.type === 'crash') hud.toast(ev.reason === 'tree' ? 'Tree!' : ev.reason === 'ground' ? 'Bump!' : 'Crunch!');
       if (ev.type === 'landed') hud.toast('Landed', 1200);
+      if (ev.type === 'catch' || ev.type === 'release') dipOars(ev);
     }
     car.model.update(dt, drive);
     followCar();
     if (car.model.saddle) poseSeated(dt);
     layTracks();
+    if (car.floats) leaveWake(dt);
     if (timing) elapsed += dt;
     updateDriveCamera(dt);
     hud.update(phys, elapsed);
     driveT += dt;
     hud.prompt(...carHint(car));
     // The rotors' wash is a wind of its own.
-    sound.update(drive.speed * car.wind + (car.flies ? drive.spool * 12 : 0), 0, false, {
+    sound.update(drive.speed * car.wind + (car.flies ? drive.spool * 12 : 0), 0, false, car.floats ? null : {
       kind: car.name, speed: Math.abs(drive.vel.dot(drive.forward(_f))), spool: drive.spool, load: drive.load,
       throttle: pedals.throttle || pedals.reverse || (car.flies && pedals.climb),
     });
@@ -877,7 +919,11 @@ function frame() {
   specks.update(dt, time, camera, titleDist, renderer.getPixelRatio());
   if (island.visible) island.update(time);
 
-  for (const v of vehicles) if (v !== car && v.phys?.spool > 0) { v.phys.coast(dt); v.model.update(dt, v.phys); }
+  for (const v of vehicles) if (v !== car && v.phys && (v.floats || v.phys.spool > 0)) { v.phys.coast(dt); v.model.update(dt, v.phys); }
+  // The boats' insides kept dry: cut out of the water and its rings.
+  const dry = vehicles.filter((v) => v.floats && v.phys).map((v) => v.model.waterline(v.lake.level));
+  water.update(time, dry);
+  ripples.update(dt, dry);
   spray.update(dt);
   powderSpray.update(dt);
   lifts.update(dt);
@@ -890,7 +936,12 @@ function frame() {
   updateWheels(dt);
   // The spout pouring into the pool, heard from 30 m off.
   const { fall } = onsen;
-  sound.setWater(fall ? 1 - THREE.MathUtils.smoothstep(Math.hypot(phys.pos.x - fall.x, phys.pos.z - fall.z), 3, 30) : 0);
+  const spout = fall ? 1 - THREE.MathUtils.smoothstep(Math.hypot(phys.pos.x - fall.x, phys.pos.z - fall.z), 3, 30) : 0;
+  // And the lake lapping at its shore, and at the boat, louder as the oars dip.
+  splash = Math.max(0, splash - dt * 1.5);
+  const edge = state === 'ride' ? shoreAt(lakes, phys.pos.x, phys.pos.z, 25) : null;
+  const lap = car?.floats ? 0.3 + splash : edge ? 0.3 * (1 - THREE.MathUtils.smoothstep(Math.abs(edge.d), 2, 25)) : 0;
+  sound.setWater(Math.max(spout, lap));
   forest.update(camera.position);
   terrain.update(camera.position);
   if (debug.cam) debug.cam(camera, phys);
@@ -900,7 +951,7 @@ function frame() {
   sun.position.copy(phys.pos).addScaledVector(sunDir, 250);
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, spray.points, dog.spray.points, specks.points, backdrop, ...forest.farMeshes, ...marks.hidden]);
+  post.render(scene, camera, time, [sky, spray.points, dog.spray.points, specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
   requestAnimationFrame(frame);
 }
 
@@ -930,7 +981,7 @@ function touchLayout() {
   } else if (state === 'drive') {
     touch.layout({
       layout: car.flies ? 'fly' : 'drive',
-      big: car.flies ? 'up' : 'handbrake',
+      big: car.flies ? 'up' : car.floats ? 'hold' : 'handbrake',
       low: car.flies ? 'down' : null,
       act: { label: car.touch.exit, icon: 'out', dim: car.phys.canExit === false },
     });
@@ -1230,6 +1281,9 @@ function throwSnowball() {
 // In the Jetson ONE you sit in its seat: Space lifts off and climbs, Shift comes
 // down and lands, W/S fly forward and back and A/D turn; you get out once it's
 // down, or hovering just above the snow.
+// In the rowing boat W rows, S backs water, A/D turn and Space holds the oars
+// in the water to stop (see vehicle/rowing.js); you step out once you're at the
+// shore, and the boat stays there, rocking.
 // While you drive, `phys` follows the vehicle, so the HUD, the GPS, the maps
 // and the diorama's "You" pin all see you where it is.
 let walkAfter = false; // walked up to it, so walk away from it
@@ -1242,6 +1296,8 @@ function getIn(v) {
     startHop();
     rider.setLocomotion('sit', v.model.seat);
   } else rider.root.visible = false;
+  // Stepping into the boat rocks it toward the side you came from.
+  v.phys.nudge?.(Math.sign(_w.subVectors(phys.pos, v.phys.pos).dot(v.phys.left(_x))) || 1);
   hud.parked = parked(); // you're the arrow now
   trail.gap(phys.pos);
   for (const t of v.tracks) t.gap(v.phys.pos);
@@ -1257,10 +1313,15 @@ function carHint(v) {
   const [keys, touchHint] = v.flies && v.phys.landed ? [v.hintLanded, v.touch.hintLanded] : [v.hint, v.touch.hint];
   return [keys, driveT < 6 ? touchHint : ''];
 }
+// False if there's nowhere to step out: no dry land beside the boat, or under the Jetson.
 function getOut() {
+  const at = exitSpot();
+  if (!at) return false;
   car.phys.land?.(); // hovering just above the snow, it sets down first
-  const drive = car.phys, at = exitSpot();
-  drive.vel.set(0, 0, 0);
+  const drive = car.phys;
+  drive.nudge?.(Math.sign(_w.set(at.x - drive.pos.x, 0, at.z - drive.pos.z).dot(drive.left(_x))) || 1);
+  if (car.floats) drive.vel.multiplyScalar(0.3); // pushed off a little as you step out
+  else drive.vel.set(0, 0, 0);
   drive.yawRate = drive.accel = drive.lateral = 0;
   state = 'ride';
   phys.reset(at.x, at.z, drive.yaw);
@@ -1272,13 +1333,16 @@ function getOut() {
   hud.parked = parked();
   hud.prompt('');
   trail.gap(phys.pos);
+  return true;
 }
-// The first of the vehicle's exits that's clear: the driver's side first.
+// The first of the vehicle's exits that's clear: the driver's side first. Never
+// into a lake: none if they're all wet.
 function exitSpot() {
   const drive = car.phys, f = drive.forward(_f), l = drive.left(_x);
   const spots = car.model.exits.map(({ along, left }) => ({ x: drive.pos.x + f.x * along + l.x * left, z: drive.pos.z + f.z * along + l.z * left }));
-  return spots.find(({ x, z }) => detail.inside(x, z, 60) && !detail.holeAt(x, z) && !forest.hit(x, z, 0.6)
-    && phys.obstacles.every((o) => boxGap(o, x, z) > 0.6)) ?? spots[0];
+  const dry = ({ x, z }) => !(shoreAt(lakes, x, z, 1)?.d < 0.3);
+  return spots.find((p) => dry(p) && detail.inside(p.x, p.z, 60) && !detail.holeAt(p.x, p.z) && !forest.hit(p.x, p.z, 0.6)
+    && phys.obstacles.every((o) => boxGap(o, p.x, p.z) > 0.6)) ?? spots.find(dry) ?? null;
 }
 function followCar() {
   phys.pos.copy(car.phys.pos);
@@ -1295,7 +1359,7 @@ function carHome() {
   camDir.set(park.dx, 0, park.dz);
   driveCameraTarget(camera.position, camLook);
   camera.lookAt(camLook);
-  hud.toast(car.hall.zh, 2000);
+  hud.toast(car.hall?.zh ?? car.home, 2000);
 }
 // On the snowmobile or in the Jetson: the rider's root follows its saddle, and
 // they lean into the turn and a little toward the steering (see Rider's seated
@@ -1354,6 +1418,27 @@ function updateDriveCamera(dt) {
   camera.lookAt(camLook);
   camera.fov = 60 + portrait() * 15 + Math.min(drive.speed, 30) * 0.35;
   camera.updateProjectionMatrix();
+}
+// Rowing: rings where the blades dip in and come out, and a line of them
+// spreading behind the stern as the boat goes. `splash` is for the sound.
+let splash = 0, wakeRun = 0;
+const _bl = new THREE.Vector3();
+function dipOars(ev) {
+  const level = car.lake.level;
+  ev.oars.forEach((on, i) => {
+    if (!on) return;
+    car.model.bladeAt(i, _bl);
+    ripples.emit(_bl.x, level, _bl.z, 0.12, ev.type === 'catch' ? 1.3 : 0.9, 1.7, 0.75);
+  });
+  if (ev.type === 'catch') splash = 0.4;
+}
+function leaveWake(dt) {
+  const drive = car.phys, sp = drive.speed;
+  wakeRun += sp * dt;
+  if (wakeRun < 0.8 || sp < 0.25) return;
+  wakeRun = 0;
+  const f = drive.forward(_f), back = car.model.dims.halfLength;
+  ripples.emit(drive.pos.x - f.x * back, car.lake.level, drive.pos.z - f.z * back, 0.4, 1.4 + sp * 0.8, 2.6, Math.min(0.45, sp * 0.25));
 }
 function layTracks() {
   const drive = car.phys, f = drive.forward(_f), l = drive.left(_x);
@@ -1790,5 +1875,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

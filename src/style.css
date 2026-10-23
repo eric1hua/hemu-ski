@@ -102,6 +102,7 @@ body {
 :is(#hud, #bigmap) .badge.intermediate { background: #d9534a; transform: rotate(45deg) scale(0.85); }
 :is(#hud, #bigmap) .badge:is(.advanced, .expert) { background: #23303a; transform: rotate(45deg) scale(0.85); }
 :is(#hud, #bigmap) .badge.offpiste { background: #fbfaf5; border-style: dashed; border-radius: 50%; }
+:is(#hud, #bigmap) .badge.lake { background: #a9d8dc; border-radius: 50%; }
 :is(#hud, #bigmap) .badge.lift { background: var(--accent); border-radius: 4px; height: 16px; }
 :is(#hud, #bigmap) .badge.hall { background: #5f8064; border-radius: 3px; }
 :is(#hud, #bigmap) .badge.pin { background: var(--route); border-radius: 50% 50% 50% 0; transform: rotate(-45deg) scale(0.85); }

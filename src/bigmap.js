@@ -5,7 +5,7 @@
 // tap a place to make it the GPS's destination (see gps/), and tap its pin, or
 // Clear route, to drop it. The main button shows you the same spot on the diorama.
 import { SERVICE_CENTRES } from './world/data.js';
-import { DIFF } from './hud.js';
+import { DIFF, drawLake } from './hud.js';
 import { drawPin, formatDistance } from './gps/navigator.js';
 
 const INK = '#23303a', PAPER = '#fbfaf5';
@@ -324,7 +324,8 @@ export class BigMap {
     const px = (x, z) => [(x - v.x0) * k, (z - v.z0) * k];
     const onMap = (x, y, m = 0) => x > m && x < S - m && y > m && y < S - m;
 
-    // Runs and lifts are drawn afresh at each zoom, so they stay crisp.
+    // Lakes, runs and lifts are drawn afresh at each zoom, so they stay crisp.
+    for (const lake of this.hud.lakes) drawLake(g, lake, (p) => px(...p), clamp(k * 2, 1, 2));
     g.lineCap = 'round';
     g.lineJoin = 'round';
     g.lineWidth = clamp(1 + k * 4.5, 1.6, 7);
@@ -379,6 +380,11 @@ export class BigMap {
     for (const sc of SERVICE_CENTRES) {
       const [x, y] = px(sc.x, sc.z), h = Math.max(4, 40 * k);
       label(sc.zh, x, y + h + 12 < S - 10 ? y + h + 12 : y - h - 10); // under the hall, unless that's off the map
+    }
+    // Lakes by name, just above them, where there's room.
+    for (const lake of this.hud.lakes) {
+      const [x, y] = px((lake.box[0] + lake.box[2]) / 2, lake.box[1]);
+      if (lake.name) label(lake.name, x, y - 10, { font: 14, optional: true });
     }
     // Lifts by number, halfway along what's on the map of their lines (their
     // top stations come in pairs).

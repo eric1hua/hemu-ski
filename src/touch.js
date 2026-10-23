@@ -36,6 +36,7 @@ const ICONS = {
 const KINDS = {
   ollie: { label: 'Ollie', icon: 'ollie', hold: true },
   handbrake: { label: 'Handbrake', icon: 'brake', hold: true },
+  hold: { label: 'Hold water', icon: 'brake', hold: true }, // the boat's oars held in the water
   up: { label: 'Up', icon: 'up', hold: true },
   down: { label: 'Down', icon: 'down', hold: true },
   board: { label: 'Board', icon: 'board' },

@@ -8,6 +8,7 @@
 // slide along; only trees and bad landings knock you over.
 import * as THREE from 'three';
 import { PISTE_HALF_WIDTH } from '../world/data.js';
+import { shoreAt } from '../world/lakes.js';
 
 const G = 9.81;
 const SKATE_SPEED = 4.5; // W on the flat pushes you along up to this (m/s)
@@ -16,11 +17,12 @@ const _n = new THREE.Vector3(), _f = new THREE.Vector3(), _s = new THREE.Vector3
 const _g = new THREE.Vector3(), _t = new THREE.Vector3();
 
 export class BoardPhysics {
-  constructor({ hf, piste, forest, obstacles = [] }) {
+  constructor({ hf, piste, forest, obstacles = [], lakes = [] }) {
     this.hf = hf;
     this.piste = piste;
     this.forest = forest;
     this.obstacles = obstacles;
+    this.lakes = lakes; // open water: their shores are walls (see world/lakes.js)
     this.crashDir = new THREE.Vector3(); // travel direction when you went down
     this.pos = new THREE.Vector3();
     this.prev = new THREE.Vector3(); // position at the start of the step, for the hole walls
@@ -205,7 +207,7 @@ export class BoardPhysics {
     }
   }
 
-  // Slide along the map edge and building walls instead of passing through.
+  // Slide along the map edge, building walls and lake shores instead of passing through.
   #walls() {
     const { hf, pos, vel } = this;
     const lim = hf.half - EDGE;
@@ -236,6 +238,15 @@ export class BoardPhysics {
       pos.z += nz * depth;
       const vn = vel.x * nx + vel.z * nz;
       if (vn < 0) { vel.x -= nx * vn; vel.z -= nz * vn; }
+      hitWall = true;
+    }
+    // The water's edge: back onto the bank, losing the speed toward the water.
+    const shore = shoreAt(this.lakes, pos.x, pos.z, 2);
+    if (shore && shore.d < 0) {
+      pos.x -= shore.nx * shore.d;
+      pos.z -= shore.nz * shore.d;
+      const vn = vel.x * shore.nx + vel.z * shore.nz;
+      if (vn < 0) { vel.x -= shore.nx * vn; vel.z -= shore.nz * vn; }
       hitWall = true;
     }
     if (hitWall && this.grounded) pos.y = hf.heightAt(pos.x, pos.z);

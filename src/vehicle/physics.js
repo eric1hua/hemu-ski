@@ -6,10 +6,11 @@
 // tail out. It stays on the ground, pitched and rolled to the plane under its
 // four corners (the wheels, or the skis and the track).
 // Walls are the edge of the heightfield, tiles deleted in the map editor, the
-// buildings (`obstacles`, rotated boxes { x, z, yaw, hw, hd }) and the trees;
-// it bounces off them rather than crashing.
+// buildings (`obstacles`, rotated boxes { x, z, yaw, hw, hd }), the trees and
+// the lakes' shores; it bounces off them rather than crashing.
 import * as THREE from 'three';
 import { PISTE_HALF_WIDTH } from '../world/data.js';
+import { shoreAt } from '../world/lakes.js';
 
 const G = 9.81;
 const EDGE = 40; // metres kept clear of the heightfield's edge
@@ -47,11 +48,12 @@ const towardZero = (v, by) => Math.sign(v) * Math.max(0, Math.abs(v) - by);
 export class VehiclePhysics {
   // `dims`: the vehicle's { wheelbase, track, wheelRadius, halfWidth, halfLength };
   // `handling` as PICKUP's.
-  constructor({ hf, piste, forest, obstacles = [], dims, handling = PICKUP }) {
+  constructor({ hf, piste, forest, obstacles = [], lakes = [], dims, handling = PICKUP }) {
     this.hf = hf;
     this.piste = piste;
     this.forest = forest;
     this.obstacles = obstacles;
+    this.lakes = lakes;
     this.dims = dims;
     this.h = handling;
     this.pos = new THREE.Vector3(); // on the ground, midway between the axles
@@ -163,8 +165,8 @@ export class VehiclePhysics {
     this.quat.setFromRotationMatrix(_m.makeBasis(_x, this.normal, _z));
   }
 
-  // Slide along the map edge, deleted tiles, buildings and trees. The vehicle
-  // is three circles down its length, each as wide as the body.
+  // Slide along the map edge, deleted tiles, buildings, trees and lake shores.
+  // The vehicle is three circles down its length, each as wide as the body.
   #walls() {
     const { hf, pos, vel, prev, dims } = this;
     const lim = hf.half - EDGE - dims.halfLength;
@@ -203,6 +205,8 @@ export class VehiclePhysics {
         nx /= d; nz /= d;
         this.#bump(nx, nz, r + t.r - d + 0.01, 'tree');
       }
+      const shore = shoreAt(this.lakes, cx(), cz(), r + 1);
+      if (shore && shore.d < r) this.#bump(shore.nx, shore.nz, r - shore.d, 'wall');
     }
   }
 

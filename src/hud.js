@@ -1,13 +1,28 @@
 import { SERVICE_CENTRES } from './world/data.js';
+import { lakeAt } from './world/lakes.js';
 import { drawPin } from './gps/navigator.js';
 
 export const DIFF = { easy: '#4f8fd6', novice: '#4f8fd6', intermediate: '#d9534a', advanced: '#23303a', expert: '#23303a' };
 const $ = (id) => document.getElementById(id);
 
+export const LAKE_INK = { fill: '#a9d8dc', edge: '#4f8fa0' };
+// A lake on a map: water inside an ink edge. `toPx` maps [x, z] to the map.
+export function drawLake(g, lake, toPx, width = 1) {
+  g.beginPath();
+  lake.outline.forEach((p, i) => (i ? g.lineTo(...toPx(p)) : g.moveTo(...toPx(p))));
+  g.closePath();
+  g.fillStyle = LAKE_INK.fill;
+  g.fill();
+  g.strokeStyle = LAKE_INK.edge;
+  g.lineWidth = width;
+  g.stroke();
+}
+
 export class Hud {
-  constructor(world, piste) {
+  constructor(world, piste, lakes = []) {
     this.world = world;
     this.piste = piste;
+    this.lakes = lakes;
     this.el = $('hud');
     this.speed = $('speed');
     this.time = $('time');
@@ -59,6 +74,7 @@ export class Hud {
     const g = c.getContext('2d');
     g.drawImage(relief, 0, 0);
     const toPx = (p) => [(p[0] - x0) * ppm, (p[1] - z0) * ppm];
+    for (const lake of this.lakes) drawLake(g, lake, toPx);
     g.lineCap = 'round';
     g.lineJoin = 'round';
     for (const run of meta.runs) {
@@ -97,14 +113,19 @@ export class Hud {
     const m = Math.floor(elapsed / 60), s = elapsed - m * 60;
     this.time.textContent = `${m}:${s.toFixed(1).padStart(4, '0')}`;
 
-    const ri = label ?? (this.piste.distAt(phys.pos.x, phys.pos.z) < 22 ? this.piste.runAt(phys.pos.x, phys.pos.z) : -1);
-    if (ri !== this.lastRun) {
-      this.lastRun = ri;
-      const run = label ? null : this.world.meta.runs[ri];
-      this.runName.textContent = label ?? (run ? run.name || 'Unnamed run' : 'Off-piste');
-      this.badge.className = 'badge ' + (run ? run.difficulty : 'offpiste');
+    const onRun = this.piste.distAt(phys.pos.x, phys.pos.z) < 22;
+    const ri = label ?? (onRun ? this.piste.runAt(phys.pos.x, phys.pos.z) : -1);
+    // Off the runs, out on a lake, the lake is named instead.
+    const lake = label || onRun ? null : lakeAt(this.lakes, phys.pos.x, phys.pos.z);
+    const where = lake ? `lake:${lake.id}` : ri;
+    if (where !== this.lastRun) {
+      this.lastRun = where;
+      const run = label || lake ? null : this.world.meta.runs[ri];
+      this.runName.textContent = label ?? (lake ? lake.name || 'Lake' : run ? run.name || 'Unnamed run' : 'Off-piste');
+      const badge = lake ? 'lake' : run ? run.difficulty : 'offpiste';
+      this.badge.className = 'badge ' + badge;
       // Where you are, for the big map.
-      this.place = { name: this.runName.textContent, badge: label ? 'lift' : run ? run.difficulty : 'offpiste' };
+      this.place = { name: this.runName.textContent, badge: label ? 'lift' : badge };
     }
 
     // Minimap: north-up window centred on the rider.
@@ -151,8 +172,9 @@ export class Hud {
   }
 
   // A parked vehicle: the pickup a red block, the snowmobile a smaller orange
-  // one on two skis, the Jetson ONE a white pod between four rotors, nose up for
-  // north, held on the rim when it's further than the map shows.
+  // one on two skis, the Jetson ONE a white pod between four rotors, the rowing
+  // boat a white hull, nose up for north, held on the rim when it's further
+  // than the map shows.
   #drawVehicle(ctx, at, k, car) {
     const W = ctx.canvas.width, R = W / 2, rim = R - 12;
     let u = (car.x - at.x) * k, v = (car.z - at.z) * k;
@@ -178,6 +200,16 @@ export class Hud {
       ctx.beginPath();
       ctx.ellipse(0, 0, 3.5, 7, 0, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
+    } else if (car.kind === 'rowboat') {
+      ctx.fillStyle = '#f2ede2';
+      ctx.moveTo(0, -8); // the bow
+      ctx.quadraticCurveTo(5, -3, 4, 6);
+      ctx.lineTo(-4, 6); // the transom
+      ctx.quadraticCurveTo(-5, -3, 0, -8);
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-3.5, 0); ctx.lineTo(3.5, 0); // the rowing thwart
+      ctx.stroke();
     } else if (car.kind === 'snowmobile') {
       ctx.moveTo(-6, -10); ctx.lineTo(-6, -3); // the skis
       ctx.moveTo(6, -10); ctx.lineTo(6, -3);

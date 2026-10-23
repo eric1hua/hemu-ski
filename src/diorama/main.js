@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadWorld, PisteField, SERVICE_CENTRES } from '../world/data.js';
 import { createDetailTerrain } from '../world/terrain.js';
+import { shapeLakes, createLakes } from '../world/lakes.js';
 import { createForest } from '../world/trees.js';
 import { createLifts, createServiceCentre } from '../world/props.js';
 import { createSky, SKY } from '../world/sky.js';
@@ -46,6 +47,8 @@ const world = await loadWorld('diorama/');
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
 const { detail: hf, meta } = world;
 const top = meta.detail.max, baseY = meta.detail.min - 160;
+// Cloud Lake, its bed and banks shaped into the block (see world/lakes.js).
+const lakes = shapeLakes(hf, meta.lakes);
 
 // ---------- Light ----------
 const sunDir = new THREE.Vector3(0.62, 0.55, 0.56).normalize();
@@ -64,7 +67,8 @@ scene.add(sun, sun.target);
 const piste = new PisteField(meta.runs, hf.size, 8);
 const terrain = createDetailTerrain(hf, piste, TREELINE, { skirt: false });
 terrain.traverse((o) => (o.castShadow = true));
-scene.add(terrain);
+const water = createLakes(lakes);
+scene.add(terrain, water.group);
 const base = createBase(hf, {
   baseY,
   top,
@@ -547,6 +551,7 @@ function frame() {
   forest.update(camera.position);
   sky.position.copy(camera.position);
   sky.material.uniforms.uTime.value = time;
+  water.update(time);
 
   if (needsPick || controls.autoRotate) {
     needsPick = false;

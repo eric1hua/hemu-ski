@@ -128,6 +128,20 @@ Mani Padme Hum**, chanted low by a few voices in unison, louder the more of
 them turn and the nearer you are, fading as they slow. On a touch screen the
 button says **Turn**.
 
+East of the summit, in the hollow just north of the ridge 可可托海道 follows,
+lies **Cloud Lake** (云湖), about 270 m by 115 m: open jade water between snowy
+banks, rippling in the breeze, foam lapping at its edge. You can't ride or walk
+onto it, but a **rowing boat** is drawn up at the shore nearest 可可托海道, stern
+to the bank. Get in beside it and you sit facing the stern, as rowers do, an oar
+in each hand: **W** rows, the boat surging on each stroke and gliding between,
+and leaving rings where the blades dip and a trail of them behind; **S** backs
+water; **A** and **D** turn it, on the spot if you're not rowing; **Space** holds
+the oars in the water to stop. Let go and it glides on for a dozen seconds and
+then drifts, rocking gently on the waves. Step out once you're at the shore (it
+stays where you left it), and **R** takes it back to its spot. The run name says
+云湖 while you're on the lake. It's on the mini-map, the big map and the diorama
+too. The boat is a stand-in, built in code, until its Tripo model is made.
+
 Up at the top lives **Mantou** (馒头), the resort's Old English Sheepdog, on
 the snow a few metres off to the side of where you start. On its own it
 potters about its spot: looks round, sniffs the snow, shakes it off its coat.
@@ -164,13 +178,14 @@ On a phone or tablet the game plays by touch (`src/touch.js`). Put a thumb down
 anywhere low on the left and drag: a stick appears under it, and sideways
 carves (by how far you push), up tucks and down skids. Hold **Ollie**, bottom
 right, and let go to jump. A button above it appears when there's something to
-do where you are: **Ride up** at a lift, **Drive**, **Ride** or **Fly** beside a
-vehicle, then **Get out** or **Get off**, and **Skip** on the lift; the prompt
+do where you are: **Ride up** at a lift, **Drive**, **Ride**, **Fly** or **Row**
+beside a vehicle, then **Get out**, **Get off** or **Step out**, and **Skip** on the lift; the prompt
 card says the same and does it when tapped. A rider who can walk gets an **On
 foot** button: on foot the stick walks, all the way out runs, and **Board** takes
 Ollie's place. In the pickup and on the snowmobile the stick drives, brakes and
 reverses and the big button is the **Handbrake**; in the Jetson ONE the stick
-flies and turns, and **Up** and **Down** climb and land. A tap skips the flight
+flies and turns, and **Up** and **Down** climb and land; in the rowing boat the
+stick rows, backs water and turns, and **Hold water** stops it. A tap skips the flight
 down from the title and the drop out of the cloud. The HUD gathers at the top,
 clear of the notch and the thumbs, and the menu folds behind one button in the
 corner. Held upright, the camera sits further back and higher, with a wider
@@ -233,12 +248,13 @@ with `npm run fetch-data -- diorama`.
 | W (↑) | tuck; push along on the flat |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
-| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup or the Jetson ONE, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it; turn a prayer wheel beside it |
+| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup, the Jetson ONE or the rowing boat, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it; turn a prayer wheel beside it |
 | Q | throw a snowball for the dog |
 | In the hot spring | A / D look around, E get out |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |
 | In the pickup or on the snowmobile | W drive, S brake / reverse, A / D steer, Space handbrake, R back to the hall |
 | In the Jetson ONE | Space take off / climb, Shift come down / land, W / S fly forward / back, A / D turn, E get out once it's down (or hovering just above the snow), R back to the hall |
+| In the rowing boat | W row, S back water, A / D turn, Space hold water (stop), E step out at the shore, R back to its spot |
 | M | the whole map, with you on it (or click the mini-map); click it to set a GPS destination, Delete clears it, scroll / + / − zoom, drag or arrows move it |
 
 ## What's in this repo
@@ -268,8 +284,9 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
 
 - `tools/terrain/fetch-data.mjs` bakes the world into `public/data/`:
   elevation from AWS Terrain Tiles (Terrarium, z14 for the 7.2 km play area,
-  z11 for the 40 km horizon), plus pistes and lifts from OpenStreetMap via
-  Overpass. Re-run with `npm run fetch-data` (it caches into `.cache/`).
+  z11 for the 40 km horizon), plus pistes, lifts and lakes from OpenStreetMap
+  via Overpass (OSM leaves Cloud Lake unnamed; the baker names it). Re-run
+  with `npm run fetch-data` (it caches into `.cache/`).
   The play area is off-centre (it reaches down to the service centres), but
   coordinates stay relative to Gondola No. 6.
 - `src/world/banks.js` banks the snow up beside the runs, as a groomer leaves
@@ -334,6 +351,19 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   the pose blends from standing to sitting. In the Jetson the same pose puts the
   hips on its cushion, the legs down the footwell under the nose and the hands on
   the sticks' handles, which follow the sticks as they lean.
+- `src/vehicle/rowboat.js` builds the rowing boat, for now a stand-in from
+  simple shapes at the size and layout the Tripo model will have: a 3.4 m skiff,
+  its hull lofted from sections, with thwarts, floorboards and two oars on
+  pivots at the oarlocks. `waterline()` traces where the hull meets the water,
+  as it sits that frame, in the middle of the planking, for the lake to cut
+  out. The rider sits through the same seated pose, turned to
+  face the stern, the hands on the oars' handles as the oars swing and the torso
+  reaching for the catch. Its header says what swapping in the Tripo model
+  takes. `src/vehicle/rowing.js` rows it: each stroke a drive (the blades in the
+  water, pulling) and a recovery, each oar asked to row, ease or back water by
+  W/S and A/D, with drag along the hull, the keel's grip across it, and points
+  round the hull kept off the shore. It rocks on springs toward the plane of the
+  lake's waves under it, the bow lifting as the rower reaches forward.
 
 - `src/world/summit.js` builds the summit's landmarks; the prayer wheels' rack
   (`public/models/prayer-wheels/`) is shown 5.5 times its size, which puts the
@@ -349,6 +379,18 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   sound to sound, a nasal one for the m's and n's, and breath for the h and the
   p's release, with a short reverb.
 
+- `src/world/lakes.js` sets each lake's surface at the middle height of the
+  ground round its edge and shapes the ground to it: a bed shelving away from
+  the edge and a low bank rising from it, one straight slope across the
+  waterline, so even the terrain's coarse triangles cross the surface where the
+  outline says. The water is a flat sheet reaching under the bank, so the bank
+  draws the shore, and each frame the boat's waterline is cut out of it, so the
+  boat stays dry inside however it rocks. It's painted in the fragment shader: jade in the shallows and
+  bluer in the middle, paler toward the far shore, the crests of the same waves
+  the boat rocks on (`waveHeight()`) as broken lines, glints of sun, and foam
+  lapping at the edge, measured from the outline itself. The shore is a wall for
+  the rider, the pickup and the snowmobile; the Jetson reads the water as
+  ground. `Ripples` are the rings spreading from the oars and the boat's wake.
 - `src/world/onsen.js` builds the hot spring from two Tripo models
   (`public/models/onsen/`): the ring of boulders and the cave rock. It draws the
   water, the stream and the steam in code. The water is a disc out to where the

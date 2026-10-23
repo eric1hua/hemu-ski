@@ -1,6 +1,6 @@
 // Bakes real-world data for the Hemu (Jikepulin) ski area into game-ready files.
 //   - Elevation: AWS Terrain Tiles (Terrarium encoding), public, no key.
-//   - Pistes + lifts: OpenStreetMap via Overpass (the same data OpenSkiMap renders).
+//   - Pistes, lifts and lakes: OpenStreetMap via Overpass (the same data OpenSkiMap renders).
 // Output goes to public/data/. Run with `npm run fetch-data`.
 // `npm run fetch-data -- diorama` bakes the larger tabletop block for diorama.html
 // into public/data/diorama/ instead.
@@ -27,6 +27,10 @@ const BACKDROP = { size: 40000, cells: 320, zoom: 11 }; // 125 m grid, horizon m
 // Tabletop block: all four lifts and the upper mountain, re-centred so the block's
 // middle is (0, 0). Coordinates in its world.json are relative to that centre.
 const DIORAMA = { size: 6400, cells: 640, zoom: 14, center: [300, 1800] };
+
+// Names OpenStreetMap doesn't have, by way id. The lake in the hollow north of
+// the ridge 可可托海道 follows east from the summit is Cloud Lake.
+const LAKE_NAMES = { 1153227323: '云湖' };
 
 const R = 6378137;
 const lat0 = (ORIGIN[1] * Math.PI) / 180;
@@ -160,7 +164,7 @@ async function overpass({ size, center: [cx, cz] = [0, 0] }, cacheName) {
   const [w, n] = localToLonLat(cx - half, cz - half);
   const [e, s] = localToLonLat(cx + half, cz + half);
   const bbox = `${s},${w},${n},${e}`;
-  const query = `[out:json][timeout:90];(way["piste:type"="downhill"](${bbox});way["aerialway"](${bbox}););out geom tags;`;
+  const query = `[out:json][timeout:90];(way["piste:type"="downhill"](${bbox});way["aerialway"](${bbox});way["natural"="water"](${bbox}););out geom tags;`;
   const buf = await cached(cacheName, async () => {
     // The public Overpass instances are often busy; retry a few times.
     for (let attempt = 1; ; attempt++) {
@@ -181,7 +185,7 @@ async function overpass({ size, center: [cx, cz] = [0, 0] }, cacheName) {
 const round1 = (v) => Math.round(v * 10) / 10;
 
 function parseWays(els, [cx, cz] = [0, 0]) {
-  const runs = [], lifts = [];
+  const runs = [], lifts = [], lakes = [];
   for (const e of els) {
     if (!e.geometry) continue;
     const t = e.tags || {};
@@ -190,9 +194,12 @@ function parseWays(els, [cx, cz] = [0, 0]) {
       runs.push({ id: e.id, name: t.name || null, difficulty: t['piste:difficulty'] || 'intermediate', points: pts });
     } else if (t.aerialway) {
       lifts.push({ id: e.id, name: t.name || null, type: t.aerialway, points: pts });
+    } else if (t.natural === 'water' && e.geometry.at(-1).lat === e.geometry[0].lat && e.geometry.at(-1).lon === e.geometry[0].lon) {
+      // A closed outline, its last point (the first again) dropped.
+      lakes.push({ id: e.id, name: t.name || LAKE_NAMES[e.id] || null, points: pts.slice(0, -1) });
     }
   }
-  return { runs, lifts };
+  return { runs, lifts, lakes };
 }
 
 async function diorama() {
@@ -201,8 +208,8 @@ async function diorama() {
   const t = quantize(blur(raw, DIORAMA.cells + 1, 2, 2));
   await fs.mkdir(OUT, { recursive: true });
   await fs.writeFile(path.join(OUT, 'terrain.u16'), Buffer.from(t.q.buffer));
-  console.log('Pistes + lifts…');
-  const { runs, lifts } = parseWays(await overpass(DIORAMA, 'overpass-diorama.json'), DIORAMA.center);
+  console.log('Pistes, lifts + lakes…');
+  const { runs, lifts, lakes } = parseWays(await overpass(DIORAMA, 'osm-diorama.json'), DIORAMA.center);
   const [cx, cz] = DIORAMA.center;
   const meta = {
     source: {
@@ -214,9 +221,10 @@ async function diorama() {
     detail: { file: 'terrain.u16', size: DIORAMA.size, cells: DIORAMA.cells, min: t.min, max: t.max },
     runs,
     lifts,
+    lakes,
   };
   await fs.writeFile(path.join(OUT, 'world.json'), JSON.stringify(meta));
-  console.log(`Done. ${t.min.toFixed(0)}–${t.max.toFixed(0)} m, ${runs.length} runs, ${lifts.length} lifts`);
+  console.log(`Done. ${t.min.toFixed(0)}–${t.max.toFixed(0)} m, ${runs.length} runs, ${lifts.length} lifts, ${lakes.length} lakes`);
 }
 
 async function main() {
@@ -234,8 +242,8 @@ async function main() {
   await fs.writeFile(path.join(OUT, 'detail.u16'), Buffer.from(d.q.buffer));
   await fs.writeFile(path.join(OUT, 'backdrop.u16'), Buffer.from(b.q.buffer));
 
-  console.log('Pistes + lifts…');
-  const { runs, lifts } = parseWays(await overpass(DETAIL, 'overpass-game.json'));
+  console.log('Pistes, lifts + lakes…');
+  const { runs, lifts, lakes } = parseWays(await overpass(DETAIL, 'osm-game.json'));
 
   const meta = {
     source: {
@@ -248,9 +256,10 @@ async function main() {
     backdrop: { file: 'backdrop.u16', size: BACKDROP.size, cells: BACKDROP.cells, min: b.min, max: b.max },
     runs,
     lifts,
+    lakes,
   };
   await fs.writeFile(path.join(OUT, 'world.json'), JSON.stringify(meta));
-  console.log(`Done. detail ${d.min.toFixed(0)}–${d.max.toFixed(0)} m, backdrop ${b.min.toFixed(0)}–${b.max.toFixed(0)} m, ${runs.length} runs, ${lifts.length} lifts`);
+  console.log(`Done. detail ${d.min.toFixed(0)}–${d.max.toFixed(0)} m, backdrop ${b.min.toFixed(0)}–${b.max.toFixed(0)} m, ${runs.length} runs, ${lifts.length} lifts, ${lakes.length} lakes`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
