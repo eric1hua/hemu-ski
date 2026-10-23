@@ -14,10 +14,9 @@ const MIN = 0.35;
 const EDGE = 40; // a spot off the table is shown this far inside its edge
 
 export class YouMarker {
-  // `offset` is the block's centre in game metres; `tag` the HTML label;
-  // `sunDir` lights the pin like the table.
-  constructor(hf, offset, tag, sunDir) {
-    Object.assign(this, { hf, offset, tag });
+  // `tag` is the HTML label; `sunDir` lights the pin like the table.
+  constructor(hf, tag, sunDir) {
+    Object.assign(this, { hf, tag });
     this.group = new THREE.Group(); // the arrow, in the table's scene
     this.group.visible = false;
     this.item = { kind: 'you', x: 0, y: 0, z: 0, ring: 42, top: new THREE.Vector3(), bearing: 0, lift: null, outside: false };
@@ -73,11 +72,10 @@ export class YouMarker {
     this.tag.classList.toggle('hidden', !w);
     if (!w) return;
     const { hf, item } = this;
-    const lim = hf.half - EDGE;
-    const x = w.x - this.offset.x, z = w.z - this.offset.z;
-    item.outside = Math.abs(x) > lim || Math.abs(z) > lim;
-    item.x = THREE.MathUtils.clamp(x, -lim, lim);
-    item.z = THREE.MathUtils.clamp(z, -lim, lim);
+    const [cx, cz] = hf.center, lim = hf.half - EDGE;
+    item.outside = !hf.inside(w.x, w.z, EDGE);
+    item.x = THREE.MathUtils.clamp(w.x, cx - lim, cx + lim);
+    item.z = THREE.MathUtils.clamp(w.z, cz - lim, cz + lim);
     item.y = hf.heightAt(item.x, item.z);
     item.bearing = w.bearing;
     item.lift = w.lift;

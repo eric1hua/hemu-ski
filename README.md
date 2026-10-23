@@ -9,10 +9,10 @@ hatched shadows, teal painted sky), set on the real terrain under
 You start at the head of **云霄峰道 Yunxiaofeng** (advanced, ~1.06 km, ~460 m
 drop), below the gondola's top station (2,763 m). There is no finish: the whole
 7.2 km block is open, with all 87 runs and 10 lifts, down the valley to the
-**East and West Service Centres** (东区/西区服务大厅) about 1,300 m below. At a
-service centre, or at any lift's bottom station, press **E** to ride the gondola up
-to its top station: from the East hall, 1号 takes you up to 7号, which goes on to
-the summit. If you hit a tree or land badly, you get back up where you fell.
+**East and West Service Centres** (东区/西区服务大厅) about 1,300 m below. Within
+10 m of any lift's bottom station, press **E** to ride it up to its top station:
+from the station out in front of the East hall, 1号 takes you up to 7号, which
+goes on to the summit. If you hit a tree or land badly, you get back up where you fell.
 The edge of the map is a wall.
 
 ```bash
@@ -199,8 +199,8 @@ window to stop the server.
 ## Diorama
 
 `npm run dev`, then open `/diorama.html`: the whole resort as a tabletop model.
-All 87 runs and 10 lifts in a 6.4 km block, cut out of the real terrain and set
-on a walnut plinth. Drag to spin it, scroll to zoom, and hover a run or lift to
+The game's own 7.2 km block, with all 87 runs and 10 lifts, cut out and set on
+a walnut plinth. Drag to spin it, scroll to zoom, and hover a run or lift to
 see its name, length and drop. The East and West service centres
 (东区/西区服务大厅) stand at the foot of 1号 and 3号 gondolas; hover them too. Gondolas and chairs run on their cables, and
 little riders carve down the runs and chain from one run onto the next.
@@ -214,7 +214,7 @@ of it:
 - a **run**: at its top, pointing downhill, ready to ride it;
 - a **bottom station**: beside it, to board with E (or **Board and ride up**
   to go straight up); a **top station**: on the snow beside it, facing downhill;
-- a **service centre**: outside the hall, facing the gondola it boards.
+- a **service centre**: outside the hall, facing its gondola's bottom station.
 
 On a touch screen, one finger spins the table, a pinch zooms and two fingers
 move it about (WASD flying's job). A tap picks a place straight away, with twice
@@ -236,9 +236,21 @@ click it like any other place; opened from the game in the same tab, its card ha
 and the diorama open side by side in two windows, the pin follows you as you ride
 (the game saves where you are to `localStorage` a few times a second).
 
-It reuses the game's modules at toy proportions (oversized trees, lifts and
-riders). Its data is a separate, larger bake in `public/data/diorama/`, made
-with `npm run fetch-data -- diorama`.
+The table is built from the game's world by the same code
+(`src/world/resort.js`): the same bake with the map editor's edits (`?original`
+leaves them out, as in the game), the snow banked beside the runs, the summit
+and Cloud Lake shaped, and everything the game stands on the ground, where the
+game puts it. Change the game's terrain, a run, a lift, a building or a prop,
+or move one in the map editor, and the diorama changes with it. Only the sizes
+differ: the lifts, their stations, the halls, the trees and the little riders
+are oversized so they read from across the table, and the forest is thinned to
+one toy tree for every dozen of the game's, each standing where one of the
+game's trees stands. The rest (the hot spring, the summit's landmarks, the
+vehicles, the rowing boat, the piste markers) is at the game's size, and
+whatever would end up inside an oversized station or hall is left off. For now
+that's the yurt, the signpost, the hut, the photo frame, the swing, two of the
+three prayer-wheel racks and the start banner by the summit's stations, and the
+pickup and the snowmobile by the East Service Centre.
 
 ## Controls
 
@@ -248,7 +260,7 @@ with `npm run fetch-data -- diorama`.
 | W (↑) | tuck; push along on the flat |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
-| E | board a lift at its bottom station or a service centre (Space skips the ride); get in or out of the pickup, the Jetson ONE or the rowing boat, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it; turn a prayer wheel beside it |
+| E | board a lift within 10 m of its bottom station (Space skips the ride); get in or out of the pickup, the Jetson ONE or the rowing boat, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it; turn a prayer wheel beside it |
 | Q | throw a snowball for the dog |
 | In the hot spring | A / D look around, E get out |
 | R | back to where you started (the top of Yunxiaofeng, or wherever the diorama sent you) |

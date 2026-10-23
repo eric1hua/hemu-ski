@@ -21,7 +21,7 @@ The repo holds two lines of work. Keep them apart.
 | `public/data/` | the baked terrain (from `tools/terrain/`) and the map edits in `edits/` (from `tools/map-editor/`) | yes |
 | `public/models/<name>/` | finished GLBs from the asset lab, each with a README: source, SHA-256, size, facing | yes |
 | `tools/map-editor/` | the map editor (`/tools/map-editor/`) and its dev-server save plugin | no |
-| `tools/terrain/` | the terrain baker (`npm run fetch-data`; `-- diorama` for the diorama's block) | no |
+| `tools/terrain/` | the terrain baker (`npm run fetch-data`) | no |
 | `tools/review/` | review pages for the riders, the dog and the summit's landmarks (`/tools/review/rider.html`, `dog.html`, `summit.html`) | no |
 | `tests/` | `npm test` | no |
 | `scripts/` | double-click launchers for the game (`Hemu Ski.command`) and the map editor (`Hemu Map Editor.command`), sharing one dev server on port 5190 | no |

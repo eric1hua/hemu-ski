@@ -1,17 +1,15 @@
 // Bakes real-world data for the Hemu (Jikepulin) ski area into game-ready files.
 //   - Elevation: AWS Terrain Tiles (Terrarium encoding), public, no key.
 //   - Pistes, lifts and lakes: OpenStreetMap via Overpass (the same data OpenSkiMap renders).
-// Output goes to public/data/. Run with `npm run fetch-data`.
-// `npm run fetch-data -- diorama` bakes the larger tabletop block for diorama.html
-// into public/data/diorama/ instead.
+// Output goes to public/data/. Run with `npm run fetch-data`. The game and the
+// diorama both read it (see src/world/resort.js).
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PNG } from 'pngjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
 const CACHE = path.join(ROOT, '.cache');
-const DIORAMA_MODE = process.argv[2] === 'diorama';
-const OUT = path.join(ROOT, DIORAMA_MODE ? 'public/data/diorama' : 'public/data');
+const OUT = path.join(ROOT, 'public/data');
 const UA = 'hemu-ski-experiment/0.1 (personal game prototype)';
 
 // Gondola #6 (6号索道) — the OpenSkiMap object the user linked.
@@ -24,9 +22,6 @@ const ORIGIN = [(LIFT_BOTTOM[0] + LIFT_TOP[0]) / 2, (LIFT_BOTTOM[1] + LIFT_TOP[1
 // Gondola No. 6 (the block's centre is written to world.json).
 const DETAIL = { size: 7200, cells: 900, zoom: 14, center: [300, 1500] };
 const BACKDROP = { size: 40000, cells: 320, zoom: 11 }; // 125 m grid, horizon mountains
-// Tabletop block: all four lifts and the upper mountain, re-centred so the block's
-// middle is (0, 0). Coordinates in its world.json are relative to that centre.
-const DIORAMA = { size: 6400, cells: 640, zoom: 14, center: [300, 1800] };
 
 // Names OpenStreetMap doesn't have, by way id. The lake in the hollow north of
 // the ridge 可可托海道 follows east from the summit is Cloud Lake.
@@ -202,33 +197,7 @@ function parseWays(els, [cx, cz] = [0, 0]) {
   return { runs, lifts, lakes };
 }
 
-async function diorama() {
-  console.log('Elevation (diorama block)…');
-  const raw = await sampleGrid(DIORAMA);
-  const t = quantize(blur(raw, DIORAMA.cells + 1, 2, 2));
-  await fs.mkdir(OUT, { recursive: true });
-  await fs.writeFile(path.join(OUT, 'terrain.u16'), Buffer.from(t.q.buffer));
-  console.log('Pistes, lifts + lakes…');
-  const { runs, lifts, lakes } = parseWays(await overpass(DIORAMA, 'osm-diorama.json'), DIORAMA.center);
-  const [cx, cz] = DIORAMA.center;
-  const meta = {
-    source: {
-      elevation: 'AWS Terrain Tiles (Terrarium), Mapzen/SRTM et al.',
-      pistes: '© OpenStreetMap contributors (ODbL), via Overpass; see openskimap.org',
-    },
-    origin: { lon: ORIGIN[0], lat: ORIGIN[1] },
-    center: { x: cx, z: cz, lonLat: localToLonLat(cx, cz) },
-    detail: { file: 'terrain.u16', size: DIORAMA.size, cells: DIORAMA.cells, min: t.min, max: t.max },
-    runs,
-    lifts,
-    lakes,
-  };
-  await fs.writeFile(path.join(OUT, 'world.json'), JSON.stringify(meta));
-  console.log(`Done. ${t.min.toFixed(0)}–${t.max.toFixed(0)} m, ${runs.length} runs, ${lifts.length} lifts, ${lakes.length} lakes`);
-}
-
 async function main() {
-  if (DIORAMA_MODE) return diorama();
   console.log('Elevation (detail)…');
   const detailRaw = await sampleGrid(DETAIL);
   // DEM upsampled from ~30 m source data is terraced; soften it so skiing feels smooth.

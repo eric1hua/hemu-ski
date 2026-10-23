@@ -60,8 +60,9 @@ function gridGeometry(hf, yOffset) {
 // only the tiles within it get the grid's full resolution, built as you come
 // near and dropped once you're well past (the rest are at half resolution, and a
 // quarter past lodDistance). Call `group.update(cameraPos)`. With `corduroy`, the
-// vertices carry where they lie on the runs (aPiste) for the groomed ribs.
-export function createDetailTerrain(hf, piste, treeline, { skirt = true, tiles = 1, lodDistance = 0, nearDistance = 0, corduroy = false } = {}) {
+// vertices carry where they lie on the runs (aPiste) for the groomed ribs. With
+// `castShadow`, the ground shades itself (the diorama's, seen from afar).
+export function createDetailTerrain(hf, piste, treeline, { skirt = true, tiles = 1, lodDistance = 0, nearDistance = 0, corduroy = false, castShadow = false } = {}) {
   const strides = nearDistance ? [1, 2, 4] : lodDistance ? [1, 2] : [1];
   const sample = vertexSampler(hf, piste, treeline, corduroy);
   const mat = makeToon({ vertexColors: true }, { hatch: 1, snow: 1, piste: corduroy ? 1 : 0 });
@@ -69,6 +70,7 @@ export function createDetailTerrain(hf, piste, treeline, { skirt = true, tiles =
   const mesh = (geo) => {
     const m = new THREE.Mesh(geo, mat);
     m.receiveShadow = true;
+    m.castShadow = castShadow;
     group.add(m);
     return m;
   };

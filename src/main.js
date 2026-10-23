@@ -1,14 +1,13 @@
 import * as THREE from 'three';
-import { loadWorld, PisteField, SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN, placeOf } from './world/data.js';
-import { createDetailTerrain, createBackdrop } from './world/terrain.js';
-import { raiseBanks, gameClearings } from './world/banks.js';
-import { createForest, GAME_FOREST } from './world/trees.js';
-import { createLifts, createPisteMarkers, createBanner, createServiceCentre, gondolaCabin } from './world/props.js';
+import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
+import { loadResort, createResort, along, MAIN_RUN, TREELINE } from './world/resort.js';
+import { createBackdrop } from './world/terrain.js';
+import { gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
-import { createOnsen, PUFF_COVER } from './world/onsen.js';
-import { shapeSummit, createSummit, cabinSpace } from './world/summit.js';
+import { PUFF_COVER } from './world/onsen.js';
+import { cabinSpace } from './world/summit.js';
 import { SUMMIT } from './world/summit-layout.js';
-import { shapeLakes, createLakes, shoreAt, overWater, Ripples } from './world/lakes.js';
+import { shoreAt, Ripples } from './world/lakes.js';
 import { PrayerWheels } from './world/prayer-wheels.js';
 import { Dog, DOG } from './dog/dog.js';
 import { THROW } from './player/throw.js';
@@ -17,13 +16,6 @@ import { toonUniforms } from './render/toon.js';
 import { Rider } from './player/rider.js';
 import { BoardPhysics } from './player/physics.js';
 import { Trail, BoardTrail, Spray, SnowCollar } from './player/fx.js';
-import { Truck } from './vehicle/truck.js';
-import { Snowmobile } from './vehicle/snowmobile.js';
-import { VehiclePhysics, PICKUP, SNOWMOBILE } from './vehicle/physics.js';
-import { Jetson } from './vehicle/jetson.js';
-import { FlightPhysics, JETSON } from './vehicle/flight.js';
-import { Rowboat } from './vehicle/rowboat.js';
-import { RowingPhysics, ROWBOAT } from './vehicle/rowing.js';
 import { Hud } from './hud.js';
 import { BigMap } from './bigmap.js';
 import { Navigator } from './gps/navigator.js';
@@ -37,8 +29,6 @@ import {
 } from './destinations.js';
 import { liftTitle } from './diorama/names.js';
 
-const MAIN_RUN = '云霄峰道'; // Yunxiaofeng — the run under Gondola No. 6
-const TREELINE = 2350;
 const G = 9.81;
 
 const canvas = document.getElementById('game');
@@ -79,75 +69,48 @@ resize();
 // Sent from the diorama, the loading screen says where to.
 const arrivalNote = takeArrivalNote();
 if (arrivalNote) document.querySelector('#loading > :last-child').textContent = arrivalNote;
-// The map editor's saved edits apply unless the URL says ?original.
-const world = await loadWorld('', { edits: !new URLSearchParams(location.search).has('original') });
+// The game's world (see world/resort.js, which the diorama builds from too):
+// the map editor's saved edits apply unless the URL says ?original.
+const resort = await loadResort({ original: new URLSearchParams(location.search).has('original') });
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
-const { meta } = world;
-const piste = new PisteField(meta.runs, world.detail.size, 4, 60, world.detail.center);
-// The snow banks up beside the runs (see world/banks.js), on a 4 m grid, but
-// stays level round the lift stations, the halls and the hot spring.
-const detail = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lifts));
-// The summit round the top of 6号 and 7号 is shaped for its landmarks (see
-// world/summit.js), before anything is set on the ground.
-shapeSummit(detail, meta.lifts);
-// Cloud Lake is open water, the ground shaped to its bed and banks (see world/lakes.js).
-const lakes = shapeLakes(detail, meta.lakes);
+const { meta, piste, lakes } = resort;
+// The ground everything stands on: the snow banked up beside the runs, the
+// summit and Cloud Lake shaped.
+const detail = resort.ground;
 const mainRun = meta.runs.find((r) => r.name === MAIN_RUN);
 
-// The ride area runs from the summit down the valley to both service centres.
-const terrain = createDetailTerrain(detail, piste, TREELINE, { tiles: 9, lodDistance: 1200, nearDistance: 300, corduroy: true });
-scene.add(terrain);
-const backdrop = createBackdrop(world.backdrop, detail, TREELINE);
+// The ride area runs from the summit down the valley to both service centres:
+// the terrain, the service centres, the forest, the lifts, the hot spring
+// hidden in the trees behind the East Service Centre (see Soaking), the
+// summit's landmarks (for now stand-ins; ?labels shows their numbers), the
+// lakes' water, the piste markers and the start banner.
+const scenery = createResort(resort, {
+  terrain: { tiles: 9, lodDistance: 1200, nearDistance: 300, corduroy: true },
+  labels: new URLSearchParams(location.search).has('labels'),
+});
+const { terrain, lodges, forest, lifts, onsen, summit, water } = scenery;
+scene.add(scenery.group);
+const backdrop = createBackdrop(resort.backdrop, detail, TREELINE);
 scene.add(backdrop);
-const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(detail, c));
-scene.add(...lodges);
-const forest = createForest(detail, piste, meta.lifts, { ...GAME_FOREST, edits: world.edits?.trees });
-scene.add(forest.group);
-const lifts = createLifts(detail, meta.lifts);
-scene.add(lifts.group);
-// The hot spring hidden in the trees behind the East Service Centre (see Soaking).
-const onsen = createOnsen(detail, ONSEN);
-scene.add(onsen.group);
-// The summit's landmarks, for now stand-ins; ?labels shows their numbers.
-const summit = createSummit(detail, { labels: new URLSearchParams(location.search).has('labels') });
-scene.add(summit.group);
-// The lakes' water, and the rings that spread on it from the boat's oars.
-const water = createLakes(lakes);
+// The rings that spread on the water from the boat's oars.
 const ripples = new Ripples();
-scene.add(water.group, ripples.group);
+scene.add(ripples.group);
 const cabinRoom = cabinSpace(summit.byId.get('summit:object-7')); // the coffee cabin's room, for the dog's home and the camera
-scene.add(createPisteMarkers(detail, meta.runs));
 const sky = createSky();
 scene.add(sky);
 
 // Start a few metres below 6号's top station, at the head of Yunxiaofeng.
 // From there the whole mountain is open: there is no finish line.
-function along(points, dist) {
-  let d = dist;
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i], b = points[i + 1];
-    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (d <= L) {
-      const t = d / L;
-      return { x: a[0] + (b[0] - a[0]) * t, z: a[1] + (b[1] - a[1]) * t, dx: (b[0] - a[0]) / L, dz: (b[1] - a[1]) / L };
-    }
-    d -= L;
-  }
-  const a = points[points.length - 2], b = points[points.length - 1];
-  const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-  return { x: b[0], z: b[1], dx: (b[0] - a[0]) / L, dz: (b[1] - a[1]) / L };
-}
 const runLength = mainRun.points.reduce((s, p, i, a) => (i ? s + Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) : 0), 0);
 const startAt = along(mainRun.points, 14);
-const gateAt = along(mainRun.points, 26);
 const yawOf = (dx, dz) => Math.atan2(-dx, -dz);
 // Where a run starts and R takes you back to: here, unless the diorama sent
 // you somewhere else (see Destinations, below).
 let spawn = { key: `run:${mainRun.id}`, x: startAt.x, z: startAt.z, dx: startAt.dx, dz: startAt.dz, toast: 'Drop in!' };
-scene.add(createBanner(detail, new THREE.Vector3(gateAt.x, 0, gateAt.z), new THREE.Vector3(-gateAt.dx, 0, -gateAt.dz), ['云霄峰道 · START', 'Yunxiaofeng · Gondola No.6'], '#f0c24a'));
 
 // Lifts you can ride: each one's cable from its bottom station to its top.
-// You board at the bottom station, or from a service centre's hall.
+// You board at the bottom station, within BOARD_REACH m of its walls. (A
+// service centre's hall boards nothing: its gondola's station is out front.)
 const rides = lifts.lines.map((l) => {
   const up = l.a.y <= l.b.y;
   const cable = up ? l.cable : [...l.cable].reverse();
@@ -158,10 +121,10 @@ const rides = lifts.lines.map((l) => {
   const label = l.name || (l.type === 'gondola' ? 'Gondola' : 'Chair lift');
   return { id: l.id, label, bottom, top, dir, cable, acc, length: acc[acc.length - 1] };
 });
-const boardSpots = [
-  ...SERVICE_CENTRES.map((c) => ({ ride: rides.find((r) => r.label === c.lift), x: c.x, z: c.z, r: 150, hall: c })),
-  ...rides.map((ride) => ({ ride, x: ride.bottom.x, z: ride.bottom.z, r: 60 })),
-].filter((s) => s.ride);
+const BOARD_REACH = 10;
+const boardSpots = rides.map((ride) => ({
+  ride, station: lifts.footprints.find((f) => Math.hypot(f.x - ride.bottom.x, f.z - ride.bottom.z) < 1),
+})).filter((s) => s.station);
 const cabin = gondolaCabin();
 cabin.visible = false;
 scene.add(cabin);
@@ -171,14 +134,14 @@ scene.add(cabin);
 // ?rider=female/male/classic.
 const rider = new Rider({ model: false });
 scene.add(rider.root);
-const phys = new BoardPhysics({ hf: detail, piste, forest, lakes, obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints, ...summit.footprints] });
+const phys = new BoardPhysics({ hf: detail, piste, forest, lakes, obstacles: [...scenery.obstacles] });
 const trail = new BoardTrail();
 const spray = new Spray();
 const powderSpray = new Spray(500, { size: 0.34, gravity: 4, life: 0.6 });
 const collar = new SnowCollar();
 scene.add(trail.mesh, spray.points, powderSpray.points, collar.mesh);
 let sink = 0; // how far the board rides down in the powder (see Powder, below)
-const hud = new Hud(world, piste, lakes);
+const hud = new Hud(resort, piste, lakes);
 const sound = new Sound();
 const menu = createMenu(sound);
 // The GPS: pick a destination on the big map and it routes you there.
@@ -199,56 +162,32 @@ scene.add(marks.group);
 // and in the Jetson they sit in its seat, hands on its two sticks.
 // On Cloud Lake there's a rowing boat, drawn up at the shore nearest a run (see
 // Rowing): the rider sits facing its stern, hands on the oars.
+// The resort parks them (see world/resort.js); this is how each one plays.
 const eastHall = SERVICE_CENTRES.find((c) => c.id === 'east');
-function parkedAt(name) {
-  const { x, z, yaw } = placeOf(`vehicle:${name}`);
-  return { x, z, dx: Math.sin(yaw), dz: Math.cos(yaw) };
-}
-// The boat's spot: afloat at the lake's edge where it comes nearest a run, its
-// stern to the bank and its bow to the water.
-const boatLake = lakes.find((l) => l.name === '云湖') ?? lakes[0] ?? null;
-function mooring(lake) {
-  // (The piste field only measures 60 m out; the runs are further than that.)
-  const toRuns = ([x, z]) => Math.min(...meta.runs.map(({ points: q }) => Math.min(...q.slice(1).map((b, i) => {
-    const a = q[i], dx = b[0] - a[0], dz = b[1] - a[1];
-    const t = THREE.MathUtils.clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1), 0, 1);
-    return Math.hypot(a[0] + dx * t - x, a[1] + dz * t - z);
-  }))));
-  let best = lake.outline[0], bestD = Infinity;
-  for (const p of lake.outline) {
-    const d = toRuns(p);
-    if (d < bestD) { bestD = d; best = p; }
-  }
-  const cx = (lake.box[0] + lake.box[2]) / 2, cz = (lake.box[1] + lake.box[3]) / 2;
-  const to = Math.hypot(cx - best[0], cz - best[1]);
-  const { nx, nz } = shoreAt([lake], best[0] + (cx - best[0]) / to, best[1] + (cz - best[1]) / to, 5);
-  const off = 3.4 / 2 + 0.1; // half the hull, its stern just touching
-  return { x: best[0] - nx * off, z: best[1] - nz * off, dx: -nx, dz: -nz };
-}
 // `cam`: the chase camera's distance back, height and look-ahead, the height it
 // looks at, how far round to the side it hangs at a crawl (radians, + to the
 // right) and how quickly it follows (6 if it doesn't say: the faster the
 // vehicle, the further it trails); `wind`: how much of the wind you hear; `lean`: how far the rider
-// leans into a turn; `flies`: it's an aircraft, with `hintLanded` its hint on
-// the ground; `touch`: its prompt and hints on a touch screen, and what the
-// button by your thumb says to get in and out.
-const vehicles = [
-  {
-    name: 'pickup', model: new Truck(), handling: PICKUP, hall: eastHall, park: parkedAt('pickup'),
+// leans into a turn; `hintLanded`: an aircraft's hint on the ground; `touch`:
+// its prompt and hints on a touch screen, and what the button by your thumb
+// says to get in and out. A boat's `home` is its lake's name.
+const CONTROLS = {
+  pickup: {
+    hall: eastHall,
     cam: { back: 9, up: 3.4, ahead: 5, look: 1.4 }, wind: 0.5, // muffled by the cab
     title: 'Pickup', prompt: '<kbd>E</kbd> drive the <b>pickup</b>',
     hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get out',
     touch: { prompt: 'Drive the <b>pickup</b> ▸', enter: 'Drive', exit: 'Get out', hint: 'Stick up to drive, down to brake · sideways to steer' },
   },
-  {
-    name: 'snowmobile', model: new Snowmobile(), handling: SNOWMOBILE, hall: eastHall, park: parkedAt('snowmobile'),
+  snowmobile: {
+    hall: eastHall,
     cam: { back: 5.6, up: 2.4, ahead: 4, look: 1.1 }, wind: 1,
     title: 'Snowmobile', prompt: '<kbd>E</kbd> ride the <b>snowmobile</b>',
     hint: '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ride · <kbd>Space</kbd> handbrake · <kbd>E</kbd> get off',
     touch: { prompt: 'Ride the <b>snowmobile</b> ▸', enter: 'Ride', exit: 'Get off', hint: 'Stick up to ride, down to brake · sideways to steer' },
   },
-  {
-    name: 'jetson', model: new Jetson(), handling: JETSON, flies: true, hall: eastHall, park: parkedAt('jetson'),
+  jetson: {
+    hall: eastHall,
     cam: { back: 6.5, up: 3.4, ahead: 4, look: 0.9, side: -0.5, follow: 12 }, wind: 1, lean: 0.012,
     title: 'Jetson ONE', prompt: '<kbd>E</kbd> fly the <b>Jetson ONE</b>',
     hintLanded: '<kbd>Space</kbd> take off · <kbd>E</kbd> get out',
@@ -258,14 +197,14 @@ const vehicles = [
       hint: 'The stick flies and turns · hold Up to climb, Down to land', hintLanded: 'Hold Up to take off',
     },
   },
-  ...(boatLake ? [{
-    name: 'rowboat', model: new Rowboat(), handling: ROWBOAT, floats: true, lake: boatLake, park: mooring(boatLake), home: boatLake.name,
+  rowboat: {
     cam: { back: 6, up: 2.5, ahead: 2.5, look: 0.6, side: 0.5, follow: 3 }, wind: 0.6, lean: 0.01,
     title: 'Rowing boat', prompt: '<kbd>E</kbd> take the <b>rowing boat</b>',
     hint: '<kbd>W</kbd> row · <kbd>S</kbd> back water · <kbd>A</kbd><kbd>D</kbd> turn · <kbd>Space</kbd> hold water · <kbd>E</kbd> step out at the shore',
     touch: { prompt: 'Take the <b>rowing boat</b> ▸', enter: 'Row', exit: 'Step out', hint: 'Stick up to row, down to back water · sideways to turn' },
-  }] : []),
-];
+  },
+};
+const vehicles = scenery.vehicles.map((v) => Object.assign(v, CONTROLS[v.name], v.lake && { home: v.lake.name }));
 const parked = () => vehicles.filter((v) => v.phys && v !== car).map((v) => v.model.footprint);
 for (const v of vehicles) {
   scene.add(v.model.root);
@@ -274,13 +213,8 @@ for (const v of vehicles) {
   // (the Jetson leaves none).
   v.tracks = [];
   v.model.ready.then(() => {
-    // The Jetson can come down on the water (but you can't get out there).
-    v.phys = new (v.flies ? FlightPhysics : v.floats ? RowingPhysics : VehiclePhysics)({
-      hf: v.flies ? overWater(detail, lakes) : detail, piste, forest, lakes, lake: v.lake, dims: v.model.dims, handling: v.handling,
-      obstacles: [...lifts.footprints, ...lodges.map((l) => l.userData.footprint), ...onsen.footprints, ...summit.footprints],
-    });
-    v.phys.reset(v.park.x, v.park.z, yawOf(v.park.dx, v.park.dz));
-    v.model.update(0, v.phys);
+    // Parked on its spot (the Jetson can come down on the water, but you can't get out there).
+    v.phys = scenery.parkVehicle(v);
     v.tracks = v.model.marks.map(() => new Trail());
     if (v.tracks.length) scene.add(...v.tracks.map((t) => t.mesh));
     phys.obstacles.push(v.model.footprint); // the rider runs into it
@@ -525,7 +459,7 @@ const introPanel = () => touch.on ? showPanel('Hemu · 禾木', `
   <p>Top of <b>Gondola No. 6</b>, Hemu Jikepulin, Altay — 2,756 m.
   The whole mountain is yours: drop into <b>云霄峰道 Yunxiaofeng</b> (${Math.round(runLength)} m) or ride anywhere,
   all the way down the valley to the <b>East Service Centre</b> (东区服务大厅), 1,300 m below.
-  Board a gondola there, or at any lift's bottom station, to head back up.</p>
+  Board the gondola at its station out front, or any lift at its bottom station, to head back up.</p>
   <div class="keys">
     <span><kbd>A</kbd><kbd>D</kbd></span><span>carve heelside / toeside</span>
     <span><kbd>W</kbd></span><span>tuck for speed · push along on the flat</span>
@@ -1043,13 +977,14 @@ function updateBoarding() {
     if (!nearCar && !nearPool && !nearDog && rider.locomotion === 'walk' && phys.speed < 0.5 && turnT <= 0) nearWheel = wheels.near(phys.pos, phys.forward(_face));
   }
   if (phys.crashed <= 0 && phys.grounded) {
-    let bestD = Infinity;
+    let bestD = BOARD_REACH;
     for (const s of boardSpots) {
-      const d = Math.hypot(phys.pos.x - s.x, phys.pos.z - s.z);
-      if (d < s.r && d < bestD) { bestD = d; boardable = s; }
+      const d = boxGap(s.station, phys.pos.x, phys.pos.z);
+      if (d < bestD) { bestD = d; boardable = s; }
     }
   }
-  const hall = boardable?.hall ?? null;
+  // Coming up to a service centre puts its name up.
+  const hall = SERVICE_CENTRES.find((c) => Math.hypot(phys.pos.x - c.x, phys.pos.z - c.z) < 150) ?? null;
   if (hall && hall !== atHall) hud.toast(hall.zh, 2200);
   atHall = hall;
   if (nearCar) hud.prompt(nearCar.prompt, nearCar.touch.prompt, pressE);
@@ -1057,9 +992,8 @@ function updateBoarding() {
   else if (nearDog) hud.prompt(`<kbd>E</kbd> pet <b>${DOG.en}</b> · <kbd>Q</kbd> throw a snowball`, `Pet <b>${DOG.en}</b> ▸`, pressE);
   else if (nearWheel) hud.prompt('<kbd>E</kbd> turn the <b>prayer wheel</b>', 'Turn the <b>prayer wheel</b> ▸', pressE);
   else if (boardable) {
-    const where = hall ? `${hall.en} · ` : '';
     const up = `<b>${boardable.ride.label}</b> up to ${Math.round(boardable.ride.top.y).toLocaleString()} m`;
-    hud.prompt(`${where}<kbd>E</kbd> ride ${up}`, `${where}Ride ${up} ▸`, pressE);
+    hud.prompt(`<kbd>E</kbd> ride ${up}`, `Ride ${up} ▸`, pressE);
   } else if (!timing && spawn.hint) hud.prompt(spawn.hint, spawn.touchHint);
   else if (dogAround) hud.prompt(`<kbd>Q</kbd> throw a snowball for <b>${DOG.en}</b>`, `Throw a snowball for <b>${DOG.en}</b> ▸`, pressQ);
   else hud.prompt('');
@@ -1683,7 +1617,7 @@ function resolveDestination(dest) {
   if (dest.kind === 'lodge') {
     const c = SERVICE_CENTRES.find((sc) => sc.id === dest.id);
     if (!c) return null;
-    // Out the front, on level ground, facing the gondola the hall boards.
+    // Out the front, on level ground, facing its gondola's bottom station.
     const fx = c.faceTo[0] - c.x, fz = c.faceTo[1] - c.z, fl = Math.hypot(fx, fz);
     const at = openSpot(c, [80, 95, 110, 130], (x, z, n, R) => (((x - c.x) * fx + (z - c.z) * fz) / (R * fl)) * 2 - (1 - n.y) * 8 - R * 0.01);
     if (!at) return null;
@@ -1697,9 +1631,10 @@ function resolveDestination(dest) {
   if (dest.end === 'top') {
     return { key, ...topSpot(ride), toast: `${zh} · ${Math.round(ride.top.y).toLocaleString()} m`, hint: HINT, touchHint: TOUCH_HINT };
   }
-  // Beside the bottom station on the side you'd queue from, facing it.
+  // Beside the bottom station on the side you'd queue from, facing it, near
+  // enough to board (16–18 m out from its middle is within BOARD_REACH).
   const P = ride.bottom;
-  const at = openSpot(P, [22, 30, 40, 50], (x, z, n, R) =>
+  const at = openSpot(P, [16, 18, 22, 30], (x, z, n, R) =>
     -(((x - P.x) * ride.dir.x + (z - P.z) * ride.dir.z) / R) * 0.5 - (1 - n.y) * 6 - R * 0.01);
   if (!at) return null;
   return facing({

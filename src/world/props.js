@@ -572,5 +572,7 @@ export function createBanner(hf, at, facing, lines, color) {
   back.rotation.y = Math.PI;
   back.position.z = -0.5;
   g.add(beam, sign, back);
+  // Its legs' outline (you ride between them).
+  g.userData.footprint = { x: at.x, z: at.z, yaw: g.rotation.y, hw: 9.75, hd: 0.75 };
   return g;
 }

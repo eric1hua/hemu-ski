@@ -6,17 +6,15 @@
 // ?numbers=0 and ?arrows=0 hide those. window.__summit drives it from a script.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadWorld, PisteField } from '../../src/world/data.js';
-import { raiseBanks, gameClearings } from '../../src/world/banks.js';
+import { loadResort, TREELINE } from '../../src/world/resort.js';
 import { createDetailTerrain, createBackdrop } from '../../src/world/terrain.js';
 import { createLifts } from '../../src/world/props.js';
 import { createSky, SKY } from '../../src/world/sky.js';
-import { shapeSummit, createSummit } from '../../src/world/summit.js';
+import { createSummit } from '../../src/world/summit.js';
 import { SUMMIT } from '../../src/world/summit-layout.js';
 import { InkPost } from '../../src/render/post.js';
 import { toonUniforms } from '../../src/render/toon.js';
 
-const TREELINE = 2350;
 const PHOTOS = '/canvas/pages/ApwypO47DueJozzQFxZIw/assets/';
 // Each photo, and the camera fitted to it: [x, y, z, yaw, pitch, roll, focal],
 // x and z from the summit's origin, y its height; yaw from north clockwise,
@@ -36,11 +34,8 @@ const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 
 // ---------- The world, as the game builds it ----------
-const world = await loadWorld('', { edits: !params.has('original') });
-const { meta } = world;
-const piste = new PisteField(meta.runs, world.detail.size, 4, 60, world.detail.center);
-const hf = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lifts));
-const frame = shapeSummit(hf, meta.lifts);
+const resort = await loadResort({ original: params.has('original') });
+const { meta, piste, ground: hf, summitFrame: frame } = resort;
 const [ox, oz] = frame.origin;
 
 const canvas = $('game');
@@ -63,7 +58,7 @@ sun.target.position.set(ox - 20, plazaY, oz - 50);
 sun.position.copy(sun.target.position).addScaledVector(new THREE.Vector3(0.62, 0.55, 0.56).normalize(), 400);
 scene.add(sun, sun.target);
 const terrain = createDetailTerrain(hf, piste, TREELINE, { tiles: 9, lodDistance: 1200, nearDistance: 300, corduroy: true });
-const backdrop = createBackdrop(world.backdrop, hf, TREELINE);
+const backdrop = createBackdrop(resort.backdrop, hf, TREELINE);
 const lifts = createLifts(hf, meta.lifts);
 const summit = createSummit(hf, { labels: params.get('numbers') !== '0' });
 const sky = createSky();

@@ -542,7 +542,9 @@ function numberTag(label) {
 // out), on `hf`'s ground. Returns the group, the collision boxes (`footprints`,
 // with `top` the height of each part) and each landmark's group by id. With
 // `labels`, each carries its number (`tags`, which can be shown later too).
-export function createSummit(hf, { labels = false } = {}) {
+// `keep` is asked about each landmark's footprint as the layout sizes it, a box
+// { x, z, yaw, hw, hd }, and the ones it turns down are left out.
+export function createSummit(hf, { labels = false, keep = () => true } = {}) {
   const group = new THREE.Group();
   group.name = 'summit';
   const tags = new THREE.Group();
@@ -551,6 +553,8 @@ export function createSummit(hf, { labels = false } = {}) {
   const footprints = [], byId = new Map(), loading = [];
   for (const o of SUMMIT.objects) {
     const { x, z, yaw } = placeOf(o.id);
+    const [hw, hd] = o.round ? [o.size[0], o.size[0]] : o.size;
+    if (!keep({ x, z, yaw, hw, hd })) continue;
     const root = new THREE.Group();
     root.name = o.id;
     root.userData = { id: o.id, label: o.label };

@@ -31,7 +31,7 @@ sun.position.set(0.62, 0.55, 0.56);
 scene.add(sun);
 
 // ---------- Map ----------
-const world = await loadWorld('', { edits: !new URLSearchParams(location.search).has('original') });
+const world = await loadWorld({ edits: !new URLSearchParams(location.search).has('original') });
 const hf = world.detail;
 const map = new EditMap(world);
 const terrain = new TerrainView(hf);

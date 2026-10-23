@@ -30,16 +30,15 @@ async function loadEdits(base) {
   }
 }
 
-// `dir` picks a sub-folder of public/data (e.g. 'diorama/'); the backdrop is optional.
+// The bake in public/data, which the game, the diorama and the tools all read.
 // With `edits`, the map editor's saved heights, holes, runs and lifts replace the
 // bake's, and the places it moved (see Places, below) go where it put them.
-export async function loadWorld(dir = '', { edits: useEdits = false } = {}) {
-  const base = BASE + dir;
-  const meta = await (await fetch(base + 'world.json')).json();
-  const edits = useEdits ? await loadEdits(base) : null;
+export async function loadWorld({ edits: useEdits = false } = {}) {
+  const meta = await (await fetch(BASE + 'world.json')).json();
+  const edits = useEdits ? await loadEdits(BASE) : null;
   const detailMeta = edits ? { ...meta.detail, ...edits.detail, file: EDITS_DIR + edits.detail.file } : meta.detail;
   const [d, b] = await Promise.all(
-    [detailMeta, meta.backdrop].map((f) => f && fetch(base + f.file, { cache: edits ? 'no-store' : 'default' }).then((r) => r.arrayBuffer())),
+    [detailMeta, meta.backdrop].map((f) => f && fetch(BASE + f.file, { cache: edits ? 'no-store' : 'default' }).then((r) => r.arrayBuffer())),
   );
   const detail = new Heightfield(detailMeta.size, detailMeta.cells, decode(d, detailMeta), detailMeta.center);
   // The bake's runs and lifts, before the edits replace them (the editor puts things back from these).
@@ -223,10 +222,10 @@ export class PisteField {
 export const PISTE_HALF_WIDTH = 17;
 
 // The two base lodges at the foot of the resort, in the game's local metres
-// (relative to Gondola No. 6; the diorama subtracts its block centre). East sits
+// (relative to Gondola No. 6, as everything is, on the diorama too). East sits
 // on its OpenStreetMap node beside 1号索道's bottom station, West beside 3号索道's.
 // Elevations are the ones printed on the resort's 2023–24 trail map. `lift` is the
-// gondola you board from the hall in the game.
+// hall's gondola, boarded at its bottom station out front.
 export const SERVICE_CENTRES = [
   { id: 'east', zh: '东区服务大厅', en: 'East Service Centre', ele: 1439, x: 710, z: 4410, faceTo: [610, 4280], roof: '#5f8064', lift: '1号索道' },
   { id: 'west', zh: '西区服务大厅', en: 'West Service Centre', ele: 1383, x: -1240, z: 4640, faceTo: [-1183, 4512], roof: '#4a5661', lift: '3号索道' },

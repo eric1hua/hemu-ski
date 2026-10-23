@@ -178,6 +178,28 @@ export function shoreAt(lakes, x, z, within = 20) {
   return null;
 }
 
+// Where the rowing boat is drawn up on `lake`: afloat at its edge where it
+// comes nearest one of the `runs`, its stern to the bank and its bow to the
+// water, as { x, z, dx, dz } (dx, dz the way it faces).
+export function mooring(lake, runs) {
+  // (The piste field only measures 60 m out; the runs are further than that.)
+  const toRuns = ([x, z]) => Math.min(...runs.map(({ points: q }) => Math.min(...q.slice(1).map((b, i) => {
+    const a = q[i], dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = THREE.MathUtils.clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+    return Math.hypot(a[0] + dx * t - x, a[1] + dz * t - z);
+  }))));
+  let best = lake.outline[0], bestD = Infinity;
+  for (const p of lake.outline) {
+    const d = toRuns(p);
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  const cx = (lake.box[0] + lake.box[2]) / 2, cz = (lake.box[1] + lake.box[3]) / 2;
+  const to = Math.hypot(cx - best[0], cz - best[1]);
+  const { nx, nz } = shoreAt([lake], best[0] + (cx - best[0]) / to, best[1] + (cz - best[1]) / to, 5);
+  const off = 3.4 / 2 + 0.1; // half the hull, its stern just touching
+  return { x: best[0] - nx * off, z: best[1] - nz * off, dx: -nx, dz: -nz };
+}
+
 // The water: a flat sheet over each lake's outline, padded out under the bank,
 // at its level. `update(time, holes)` moves its ripples and its foam, and cuts
 // `holes` out of it: rings of world (x, z) (Vector2s), the inside of each boat

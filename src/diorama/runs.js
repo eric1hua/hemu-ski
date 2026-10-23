@@ -144,7 +144,7 @@ export class RunMap {
     const maxT = 30000;
     while (t < maxT) {
       p.copy(o).addScaledVector(d, t);
-      if (Math.abs(p.x) > hf.half || Math.abs(p.z) > hf.half) {
+      if (!hf.inside(p.x, p.z)) {
         if (t > 0) return null;
       } else if (p.y < hf.heightAt(p.x, p.z)) {
         let lo = prev, hi = t;

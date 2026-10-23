@@ -91,7 +91,7 @@ export class Nav {
         };
       case 'lodge':
         return {
-          what: `Tickets, food and rentals. Board ${item.lift} from the hall, or ride off from the door.`,
+          what: `Tickets, food and rentals. Board ${item.lift} at its station out front, or ride off from the door.`,
           acts: [{ label: 'Go to the hall', key: `lodge:${item.id}` }, look],
         };
       case 'station':

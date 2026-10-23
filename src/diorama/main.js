@@ -1,14 +1,13 @@
-// Tabletop diorama of the whole Hemu (Jikepulin) ski area: real terrain cut out
-// as a block on a walnut plinth, every run painted on as a trail-map line,
-// working lifts and tiny riders, viewed with an orbit camera. Reuses the game's
-// terrain, forest, lift, rider and ink-rendering modules at toy proportions.
+// Tabletop diorama of the whole Hemu (Jikepulin) ski area: the game's world cut
+// out as a block on a walnut plinth, every run painted on as a trail-map line,
+// working lifts and tiny riders, viewed with an orbit camera. The block is the
+// game's own (world/resort.js builds both): its ground, the map editor's edits,
+// and everything the game stands on it, in the game's own metres, with the
+// lifts, the halls and the trees at toy proportions.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadWorld, PisteField, SERVICE_CENTRES } from '../world/data.js';
-import { createDetailTerrain } from '../world/terrain.js';
-import { shapeLakes, createLakes } from '../world/lakes.js';
-import { createForest } from '../world/trees.js';
-import { createLifts, createServiceCentre } from '../world/props.js';
+import { SERVICE_CENTRES } from '../world/data.js';
+import { loadResort, createResort } from '../world/resort.js';
 import { createSky, SKY } from '../world/sky.js';
 import { InkPost } from '../render/post.js';
 import { toonUniforms } from '../render/toon.js';
@@ -20,12 +19,11 @@ import { YouMarker } from './you.js';
 import { createCloudWipe } from '../intro.js';
 import { noteArrival, takeArrivalNote, parseWhereabouts, watchWhereabouts } from '../destinations.js';
 
-const TREELINE = 2350;
-// Toy proportions: props are oversized so they read from across the table.
-const LIFT_SCALE = 5;
-const STATION_SCALE = 3.2;
-const TREE_SCALE = 2.8;
-const LODGE_SCALE = 1.8;
+// Toy proportions: the lifts (towers, cable and cars), their stations, the halls
+// and the trees are oversized so they read from across the table, the trees
+// thinned to one per 34 m at most, each standing for 12 of the game's (see
+// createResort); the rest is at the game's size.
+const TOY = { lift: 5, station: 3.2, lodge: 1.8, tree: 2.8, treeCell: 34, treePer: 12, carSpacing: 2.4, liftSpeed: 14 };
 const RIDER_SCALE = 8;
 const RIDERS = 56;
 
@@ -43,12 +41,16 @@ const camera = new THREE.PerspectiveCamera(30, 1, 20, 80000);
 // Coming back from the game, the loading screen says so.
 const arrivalNote = takeArrivalNote();
 if (arrivalNote) document.querySelector('#loading > :last-child').textContent = arrivalNote;
-const world = await loadWorld('diorama/');
+// The game's world, as the game loads it: with the map editor's edits unless
+// the address says ?original, as the game's does.
+const resort = await loadResort({ original: new URLSearchParams(location.search).has('original') });
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
-const { detail: hf, meta } = world;
-const top = meta.detail.max, baseY = meta.detail.min - 160;
-// Cloud Lake, its bed and banks shaped into the block (see world/lakes.js).
-const lakes = shapeLakes(hf, meta.lakes);
+const { ground: hf, meta } = resort;
+// The block is off the origin, as in the game (it reaches down to the service centres).
+const [cx, cz] = hf.center;
+let low = Infinity, top = -Infinity;
+for (const h of hf.h) { if (h < low) low = h; if (h > top) top = h; }
+const baseY = low - 160;
 
 // ---------- Light ----------
 const sunDir = new THREE.Vector3(0.62, 0.55, 0.56).normalize();
@@ -59,38 +61,45 @@ const sh = hf.half * 1.45;
 Object.assign(sun.shadow.camera, { left: -sh, right: sh, top: sh, bottom: -sh, near: 100, far: 22000 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 4;
-sun.target.position.set(0, (top + baseY) / 2, 0);
+sun.target.position.set(cx, (top + baseY) / 2, cz);
 sun.position.copy(sun.target.position).addScaledVector(sunDir, 10000);
 scene.add(sun, sun.target);
 
 // ---------- Diorama ----------
-const piste = new PisteField(meta.runs, hf.size, 8);
-const terrain = createDetailTerrain(hf, piste, TREELINE, { skirt: false });
-terrain.traverse((o) => (o.castShadow = true));
-const water = createLakes(lakes);
-scene.add(terrain, water.group);
+// Everything the game stands on its ground, built as the game builds it (see
+// world/resort.js): the ground shades itself, seen from this far; its 4 m grid
+// is drawn at 8 m, and at 4 m only where you fly in close.
+const scenery = createResort(resort, {
+  terrain: { skirt: false, castShadow: true, tiles: 9, lodDistance: 7000, nearDistance: 500 },
+  forest: { chunk: 800, lodDistance: 2600 },
+  toy: TOY,
+});
+const { terrain, lifts, forest, water } = scenery;
+scene.add(scenery.group);
 const base = createBase(hf, {
   baseY,
   top,
   title: 'HEMU · 禾木  —  JIKEPULIN SKI RESORT',
-  subtitle: `Altay, Xinjiang · ${Math.round(meta.detail.min).toLocaleString()}–${Math.round(top).toLocaleString()} m · ${meta.runs.length} runs · ${meta.lifts.length} lifts`,
+  subtitle: `Altay, Xinjiang · ${Math.round(low).toLocaleString()}–${Math.round(top).toLocaleString()} m · ${meta.runs.length} runs · ${meta.lifts.length} lifts`,
 });
 scene.add(base.group);
-// Base lodges, moved from game coordinates into the block's.
-const lodges = SERVICE_CENTRES.map((c) => {
-  const at = { ...c, x: c.x - meta.center.x, z: c.z - meta.center.z, faceTo: [c.faceTo[0] - meta.center.x, c.faceTo[1] - meta.center.z] };
-  const group = createServiceCentre(hf, at, { scale: LODGE_SCALE });
-  scene.add(group);
-  return { kind: 'lodge', ...at, group, ring: 64 * LODGE_SCALE, top: new THREE.Vector3(at.x, group.position.y + 20 * LODGE_SCALE, at.z) };
+// The game's vehicles, parked where the game parks them: those that fit beside
+// the oversized halls. The rowing boat keeps its hull dry on the water.
+const afloat = [];
+for (const v of scenery.vehicles) {
+  v.model.ready.then(() => {
+    scenery.parkVehicle(v);
+    if (!scenery.fits([v.model.footprint])) return;
+    scene.add(v.model.root);
+    if (v.floats) afloat.push(v.model.waterline(v.lake.level));
+  }).catch(() => {});
+}
+// The service centres, picked like the stations.
+const lodges = SERVICE_CENTRES.map((c, i) => {
+  const group = scenery.lodges[i];
+  return { kind: 'lodge', ...c, group, ring: 64 * TOY.lodge, top: new THREE.Vector3(c.x, group.position.y + 20 * TOY.lodge, c.z) };
 });
-const forest = createForest(hf, piste, meta.lifts, {
-  treeline: TREELINE, spacing: 34, scale: TREE_SCALE, chunk: 800, lodDistance: 2600, density: 0.45,
-  clearings: lodges.map((l) => ({ x: l.x, z: l.z, r: 70 * LODGE_SCALE })),
-});
-scene.add(forest.group);
-const lifts = createLifts(hf, meta.lifts, { scale: LIFT_SCALE, stationScale: STATION_SCALE, spacing: 2.4, speed: 14 });
-scene.add(lifts.group);
-const cableHeight = (l) => (l.type === 'magic_carpet' ? 3 : (l.type === 'gondola' ? 13 : 9) * LIFT_SCALE);
+const cableHeight = (l) => (l.type === 'magic_carpet' ? 3 : (l.type === 'gondola' ? 13 : 9) * TOY.lift);
 const runMap = new RunMap(hf, meta.runs, meta.lifts, { lineHalf: 10, liftCable: cableHeight });
 scene.add(runMap.group);
 // Each lift's two stations, picked like the lodges.
@@ -98,8 +107,8 @@ const stations = lifts.lines.flatMap((line) => {
   const lift = runMap.lifts.find((l) => l.lift.id === line.id);
   const up = line.a.y <= line.b.y;
   return [[up ? line.a : line.b, 'bottom'], [up ? line.b : line.a, 'top']].map(([P, end]) => ({
-    kind: 'station', lift, end, x: P.x, y: P.y, z: P.z, ring: 13 * STATION_SCALE,
-    top: new THREE.Vector3(P.x, P.y + 6 * STATION_SCALE, P.z),
+    kind: 'station', lift, end, x: P.x, y: P.y, z: P.z, ring: 13 * TOY.station,
+    top: new THREE.Vector3(P.x, P.y + 6 * TOY.station, P.z),
   }));
 });
 const skiers = new Skiers(hf, meta.runs, { count: RIDERS, scale: RIDER_SCALE });
@@ -108,7 +117,7 @@ const sky = createSky();
 scene.add(sky);
 // Where you are in the game: from the address (?you=), or else from a game
 // open in another window, which keeps it moving as you ride.
-const you = new YouMarker(hf, meta.center, document.getElementById('you-tag'), sunDir);
+const you = new YouMarker(hf, document.getElementById('you-tag'), sunDir);
 scene.add(you.group);
 const savedYou = watchWhereabouts((w) => {
   you.set(w);
@@ -132,10 +141,10 @@ controls.maxDistance = 24000;
 controls.minPolarAngle = 0.12;
 controls.maxPolarAngle = 1.42;
 controls.autoRotateSpeed = 0.35;
-const home = new THREE.Vector3(0, (top + baseY) / 2 + 150, 250);
+const home = new THREE.Vector3(cx, (top + baseY) / 2 + 150, cz + 250);
 controls.target.copy(home);
 // The orbit pivot is kept inside the block.
-const pivotBox = new THREE.Box3(new THREE.Vector3(-hf.half, baseY, -hf.half), new THREE.Vector3(hf.half, top, hf.half));
+const pivotBox = new THREE.Box3(new THREE.Vector3(hf.x0, baseY, hf.z0), new THREE.Vector3(hf.x0 + hf.size, top, hf.z0 + hf.size));
 
 function fitDistance() {
   const vf = THREE.MathUtils.degToRad(camera.fov);
@@ -300,7 +309,7 @@ function fly(dt) {
 const tip = document.getElementById('tip');
 const mouse = new THREE.Vector2(), ndc = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-const bounds = new THREE.Box3(new THREE.Vector3(-hf.half, baseY, -hf.half), new THREE.Vector3(hf.half, top + 400, hf.half));
+const bounds = new THREE.Box3(new THREE.Vector3(hf.x0, baseY, hf.z0), new THREE.Vector3(hf.x0 + hf.size, top + 400, hf.z0 + hf.size));
 let pointerIn = false, dragging = false, downAt = null, needsPick = false, lastTap = null;
 canvas.addEventListener('pointermove', (e) => {
   mouse.set(e.clientX, e.clientY);
@@ -337,7 +346,7 @@ function pick(finger = false) {
   if (!pointerIn || dragging) return null;
   const w = window.innerWidth, h = window.innerHeight, k = finger ? 2 : 1;
   const spot = (you.shown && nearestSpot([you.item], you.reach, w, h, 12 * k))
-    || nearestSpot(lodges, 55 * LODGE_SCALE, w, h, 12 * k) || nearestSpot(stations, 16 * STATION_SCALE, w, h, 12 * k);
+    || nearestSpot(lodges, 55 * TOY.lodge, w, h, 12 * k) || nearestSpot(stations, 16 * TOY.station, w, h, 12 * k);
   if (spot) return spot;
   const lift = runMap.nearestLift(mouse, camera, w, h, 9 * k);
   if (lift) return lift;
@@ -549,9 +558,10 @@ function frame() {
   skiers.update(dt, camera);
   you.update(camera, time, window.innerWidth, window.innerHeight);
   forest.update(camera.position);
+  terrain.update(camera.position);
   sky.position.copy(camera.position);
   sky.material.uniforms.uTime.value = time;
-  water.update(time);
+  water.update(time, afloat);
 
   if (needsPick || controls.autoRotate) {
     needsPick = false;

@@ -158,14 +158,14 @@ export function createBase(hf, { baseY, top, title, subtitle }) {
   // Two-step walnut plinth.
   const wood = woodTexture();
   const plinthMat = makeToon({ map: wood, color: '#b89a86' }, { hatch: 1 });
-  const S = hf.size;
+  const S = hf.size, [cx, cz] = hf.center;
   const steps = [
     { w: S + 260, h: 170, y: baseY },
     { w: S + 520, h: 120, y: baseY - 170 },
   ];
   for (const st of steps) {
     const box = new THREE.Mesh(new THREE.BoxGeometry(st.w, st.h, st.w), plinthMat);
-    box.position.y = st.y - st.h / 2;
+    box.position.set(cx, st.y - st.h / 2, cz);
     box.receiveShadow = true;
     box.castShadow = true;
     group.add(box);
@@ -175,12 +175,12 @@ export function createBase(hf, { baseY, top, title, subtitle }) {
     new THREE.PlaneGeometry(2400, 150),
     makeToon({ map: plaqueTexture(title, subtitle) }, { hatch: 0 }),
   );
-  plaque.position.set(0, baseY - 85, (S + 260) / 2 + 1.5);
+  plaque.position.set(cx, baseY - 85, cz + (S + 260) / 2 + 1.5);
   group.add(plaque);
 
   const compass = new THREE.Mesh(new THREE.CircleGeometry(95, 40), makeToon({ map: compassTexture() }, { hatch: 0 }));
   compass.rotation.x = -Math.PI / 2;
-  compass.position.set(S / 2 + 65, baseY + 1.5, S / 2 + 65);
+  compass.position.set(cx + S / 2 + 65, baseY + 1.5, cz + S / 2 + 65);
   compass.scale.setScalar(0.55);
   group.add(compass);
 
@@ -198,7 +198,7 @@ export function createBase(hf, { baseY, top, title, subtitle }) {
     new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }),
   );
   shadow.rotation.x = -Math.PI / 2;
-  shadow.position.y = baseY - 290 - 2;
+  shadow.position.set(cx, baseY - 290 - 2, cz);
   shadow.renderOrder = -1;
   group.add(shadow);
 
